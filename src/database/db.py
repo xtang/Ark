@@ -43,7 +43,12 @@ class Database:
                 error_message TEXT,
                 dialogue_json_path TEXT,
                 audio_path TEXT,
-                video_path TEXT
+                video_path TEXT,
+                dialogue_duration_seconds REAL DEFAULT 0,
+                audio_duration_seconds REAL DEFAULT 0,
+                image_duration_seconds REAL DEFAULT 0,
+                video_duration_seconds REAL DEFAULT 0,
+                total_duration_seconds REAL DEFAULT 0
             )
         """)
 
@@ -59,8 +64,13 @@ class Database:
                 summary TEXT,
                 word_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                duration_seconds REAL DEFAULT 0,
                 success INTEGER DEFAULT 0,
                 error_message TEXT,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
+                total_tokens INTEGER DEFAULT 0,
                 FOREIGN KEY (generation_id) REFERENCES generations(id)
             )
         """)
@@ -71,12 +81,17 @@ class Database:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 generation_id INTEGER NOT NULL,
                 dialogue_count INTEGER DEFAULT 0,
+                request_json TEXT,
+                response_json TEXT,
                 audio_path TEXT,
                 duration_seconds REAL DEFAULT 0,
                 voice_segments_json TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                request_duration_seconds REAL DEFAULT 0,
                 success INTEGER DEFAULT 0,
                 error_message TEXT,
+                character_count INTEGER DEFAULT 0,
                 FOREIGN KEY (generation_id) REFERENCES generations(id)
             )
         """)
@@ -89,9 +104,15 @@ class Database:
                 prompt TEXT NOT NULL,
                 image_index INTEGER DEFAULT 0,
                 image_path TEXT,
+                response_raw TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                duration_seconds REAL DEFAULT 0,
                 success INTEGER DEFAULT 0,
                 error_message TEXT,
+                retry_count INTEGER DEFAULT 0,
+                input_tokens INTEGER DEFAULT 0,
+                output_tokens INTEGER DEFAULT 0,
                 FOREIGN KEY (generation_id) REFERENCES generations(id)
             )
         """)
@@ -106,13 +127,60 @@ class Database:
                 resolution TEXT,
                 file_size_bytes INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                completed_at TIMESTAMP,
+                processing_duration_seconds REAL DEFAULT 0,
                 success INTEGER DEFAULT 0,
                 error_message TEXT,
+                ffmpeg_command TEXT,
                 FOREIGN KEY (generation_id) REFERENCES generations(id)
             )
         """)
 
+        # Add migration for existing databases (add missing columns)
+        self._migrate_schema(cursor)
+
         self.conn.commit()
+
+    def _migrate_schema(self, cursor) -> None:
+        """Add missing columns to existing tables."""
+        migrations = [
+            # Generations timing columns
+            ("generations", "dialogue_duration_seconds", "REAL DEFAULT 0"),
+            ("generations", "audio_duration_seconds", "REAL DEFAULT 0"),
+            ("generations", "image_duration_seconds", "REAL DEFAULT 0"),
+            ("generations", "video_duration_seconds", "REAL DEFAULT 0"),
+            ("generations", "total_duration_seconds", "REAL DEFAULT 0"),
+            # Dialogue request columns
+            ("dialogue_requests", "completed_at", "TIMESTAMP"),
+            ("dialogue_requests", "duration_seconds", "REAL DEFAULT 0"),
+            ("dialogue_requests", "input_tokens", "INTEGER DEFAULT 0"),
+            ("dialogue_requests", "output_tokens", "INTEGER DEFAULT 0"),
+            ("dialogue_requests", "total_tokens", "INTEGER DEFAULT 0"),
+            # Audio request columns
+            ("audio_requests", "request_json", "TEXT"),
+            ("audio_requests", "response_json", "TEXT"),
+            ("audio_requests", "completed_at", "TIMESTAMP"),
+            ("audio_requests", "request_duration_seconds", "REAL DEFAULT 0"),
+            ("audio_requests", "character_count", "INTEGER DEFAULT 0"),
+            # Image request columns
+            ("image_requests", "response_raw", "TEXT"),
+            ("image_requests", "completed_at", "TIMESTAMP"),
+            ("image_requests", "duration_seconds", "REAL DEFAULT 0"),
+            ("image_requests", "retry_count", "INTEGER DEFAULT 0"),
+            ("image_requests", "input_tokens", "INTEGER DEFAULT 0"),
+            ("image_requests", "output_tokens", "INTEGER DEFAULT 0"),
+            # Video output columns
+            ("video_outputs", "completed_at", "TIMESTAMP"),
+            ("video_outputs", "processing_duration_seconds", "REAL DEFAULT 0"),
+            ("video_outputs", "ffmpeg_command", "TEXT"),
+        ]
+
+        for table, column, col_type in migrations:
+            try:
+                cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}")
+            except sqlite3.OperationalError:
+                # Column already exists
+                pass
 
     def close(self) -> None:
         """Close database connection."""
@@ -345,20 +413,80 @@ class Database:
         image_path: str,
         success: bool,
         error_message: Optional[str] = None,
+        duration_seconds: float = 0.0,
+        retry_count: int = 0,
+        response_raw: str = "",
     ) -> None:
-        """Update image request with result."""
+        """Update image request with result, timing, and retry info."""
         cursor = self.conn.cursor()
         cursor.execute(
             """
             UPDATE image_requests SET
                 image_path = ?,
                 success = ?,
-                error_message = ?
+                error_message = ?,
+                completed_at = ?,
+                duration_seconds = ?,
+                retry_count = ?,
+                response_raw = ?
             WHERE id = ?
             """,
-            (image_path, 1 if success else 0, error_message, req_id),
+            (
+                image_path,
+                1 if success else 0,
+                error_message,
+                datetime.now().isoformat(),
+                duration_seconds,
+                retry_count,
+                response_raw,
+                req_id,
+            ),
         )
         self.conn.commit()
+
+    def update_generation_timing(
+        self,
+        gen_id: int,
+        dialogue_duration_seconds: Optional[float] = None,
+        audio_duration_seconds: Optional[float] = None,
+        image_duration_seconds: Optional[float] = None,
+        video_duration_seconds: Optional[float] = None,
+    ) -> None:
+        """Update stage timing for a generation."""
+        updates = []
+        values = []
+
+        if dialogue_duration_seconds is not None:
+            updates.append("dialogue_duration_seconds = ?")
+            values.append(dialogue_duration_seconds)
+
+        if audio_duration_seconds is not None:
+            updates.append("audio_duration_seconds = ?")
+            values.append(audio_duration_seconds)
+
+        if image_duration_seconds is not None:
+            updates.append("image_duration_seconds = ?")
+            values.append(image_duration_seconds)
+
+        if video_duration_seconds is not None:
+            updates.append("video_duration_seconds = ?")
+            values.append(video_duration_seconds)
+
+        if not updates:
+            return
+
+        # Also update total
+        updates.append("total_duration_seconds = COALESCE(dialogue_duration_seconds, 0) + COALESCE(audio_duration_seconds, 0) + COALESCE(image_duration_seconds, 0) + COALESCE(video_duration_seconds, 0)")
+
+        values.append(gen_id)
+
+        cursor = self.conn.cursor()
+        cursor.execute(
+            f"UPDATE generations SET {', '.join(updates)} WHERE id = ?",
+            values,
+        )
+        self.conn.commit()
+
 
     def get_image_requests(self, generation_id: int) -> list[ImageRequest]:
         """Get all image requests for a generation."""

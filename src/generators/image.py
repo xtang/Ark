@@ -1,7 +1,9 @@
-"""Image generator using Gemini AI."""
+"""Image generator using Gemini AI with retry logic."""
 
 import base64
 import os
+import time
+import traceback
 from pathlib import Path
 from typing import Any
 
@@ -13,7 +15,7 @@ from ..database import Database
 
 
 class ImageGenerator:
-    """Generate podcast images using Gemini AI."""
+    """Generate podcast images using Gemini AI with retry support."""
 
     SCENE_PROMPT_TEMPLATE = """分析以下播客对话内容，你必须提取【恰好{count}个】最适合可视化的关键场景。
 这非常重要：你必须返回恰好 {count} 个场景，不能多也不能少！
@@ -40,6 +42,10 @@ class ImageGenerator:
 ]
 ```"""
 
+    # Retry settings
+    MAX_RETRIES = 3
+    RETRY_DELAY_SECONDS = 2
+
     def __init__(self, config: dict[str, Any], db: Database):
         """
         Initialize the image generator.
@@ -60,7 +66,7 @@ class ImageGenerator:
             vertexai=True,
             api_key=api_key,
         )
-        self.text_model = "gemini-3-pro-preview"
+        self.text_model = "gemini-3-flash-preview"
         self.image_model = "gemini-2.5-flash-image"
 
         # Dynamic image count settings
@@ -128,53 +134,121 @@ class ImageGenerator:
 
         return json.loads(json_str)
 
-    def _generate_image(self, prompt: str, output_path: Path) -> bool:
-        """Generate a single image using Gemini."""
-        gen_config = types.GenerateContentConfig(
-            temperature=1,
-            top_p=0.95,
-            max_output_tokens=32768,
-            response_modalities=["IMAGE"],
-            safety_settings=[
-                types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
-                types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
-                types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
-                types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
-            ],
-            image_config=types.ImageConfig(
-                aspect_ratio=self.aspect_ratio,
-                image_size="1K",
-                output_mime_type="image/png",
-            ),
+    def _generate_image_with_retry(
+        self,
+        prompt: str,
+        output_path: Path,
+        req_id: int,
+    ) -> tuple[bool, str, int]:
+        """
+        Generate a single image with retry logic.
+
+        Returns:
+            Tuple of (success, error_message, retry_count)
+        """
+        last_error = ""
+        retry_count = 0
+
+        for attempt in range(self.MAX_RETRIES):
+            start_time = time.time()
+            try:
+                gen_config = types.GenerateContentConfig(
+                    temperature=1,
+                    top_p=0.95,
+                    max_output_tokens=32768,
+                    response_modalities=["IMAGE"],
+                    safety_settings=[
+                        types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
+                        types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
+                        types.SafetySetting(category="HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold="OFF"),
+                        types.SafetySetting(category="HARM_CATEGORY_HARASSMENT", threshold="OFF"),
+                    ],
+                    image_config=types.ImageConfig(
+                        aspect_ratio=self.aspect_ratio,
+                        image_size="1K",
+                        output_mime_type="image/png",
+                    ),
+                )
+
+                contents = [
+                    types.Content(
+                        role="user",
+                        parts=[types.Part.from_text(text=prompt)],
+                    )
+                ]
+
+                response = self.client.models.generate_content(
+                    model=self.image_model,
+                    contents=contents,
+                    config=gen_config,
+                )
+
+                duration = time.time() - start_time
+
+                # Check for blocked content or no candidates
+                if not response.candidates:
+                    last_error = f"No candidates in response (attempt {attempt + 1})"
+                    retry_count = attempt + 1
+                    if attempt < self.MAX_RETRIES - 1:
+                        time.sleep(self.RETRY_DELAY_SECONDS)
+                    continue
+
+                candidate = response.candidates[0]
+
+                # Check finish reason
+                if hasattr(candidate, 'finish_reason') and candidate.finish_reason:
+                    finish_reason = str(candidate.finish_reason)
+                    if 'SAFETY' in finish_reason or 'BLOCKED' in finish_reason:
+                        last_error = f"Content blocked: {finish_reason} (attempt {attempt + 1})"
+                        retry_count = attempt + 1
+                        if attempt < self.MAX_RETRIES - 1:
+                            time.sleep(self.RETRY_DELAY_SECONDS)
+                        continue
+
+                # Extract image from response
+                if hasattr(candidate, 'content') and candidate.content:
+                    for part in candidate.content.parts:
+                        if hasattr(part, "inline_data") and part.inline_data:
+                            image_data = part.inline_data.data
+                            if isinstance(image_data, str):
+                                image_bytes = base64.b64decode(image_data)
+                            else:
+                                image_bytes = image_data
+
+                            with open(output_path, "wb") as f:
+                                f.write(image_bytes)
+
+                            # Update with timing info
+                            self.db.update_image_request(
+                                req_id=req_id,
+                                image_path=str(output_path),
+                                success=True,
+                                duration_seconds=duration,
+                                retry_count=attempt,
+                            )
+                            return True, "", attempt
+
+                last_error = f"No image data in response (attempt {attempt + 1})"
+                retry_count = attempt + 1
+
+            except Exception as e:
+                duration = time.time() - start_time
+                last_error = f"Error (attempt {attempt + 1}): {str(e)}\n{traceback.format_exc()}"
+                retry_count = attempt + 1
+
+            # Wait before retry
+            if attempt < self.MAX_RETRIES - 1:
+                time.sleep(self.RETRY_DELAY_SECONDS)
+
+        # All retries failed
+        self.db.update_image_request(
+            req_id=req_id,
+            image_path="",
+            success=False,
+            error_message=last_error,
+            retry_count=retry_count,
         )
-
-        contents = [
-            types.Content(
-                role="user",
-                parts=[types.Part.from_text(text=prompt)],
-            )
-        ]
-
-        response = self.client.models.generate_content(
-            model=self.image_model,
-            contents=contents,
-            config=gen_config,
-        )
-
-        # Extract image from response
-        for part in response.candidates[0].content.parts:
-            if hasattr(part, "inline_data") and part.inline_data:
-                image_data = part.inline_data.data
-                if isinstance(image_data, str):
-                    image_bytes = base64.b64decode(image_data)
-                else:
-                    image_bytes = image_data
-
-                with open(output_path, "wb") as f:
-                    f.write(image_bytes)
-                return True
-
-        return False
+        return False, last_error, retry_count
 
     def generate(
         self,
@@ -200,6 +274,7 @@ class ImageGenerator:
         """
         output_dir.mkdir(parents=True, exist_ok=True)
         image_paths = []
+        total_start_time = time.time()
 
         try:
             # Calculate dynamic image count
@@ -208,7 +283,7 @@ class ImageGenerator:
             # Extract scenes
             scenes = self._extract_scenes(dialogue, summary, image_count)
 
-            # Generate each image
+            # Generate each image with retry
             for i, scene in enumerate(scenes[:image_count]):
                 prompt = scene.get("prompt", "")
                 if not prompt:
@@ -219,31 +294,22 @@ class ImageGenerator:
 
                 image_path = output_dir / f"image_{generation_id}_{i}.png"
 
-                try:
-                    success = self._generate_image(prompt, image_path)
+                success, error_msg, retries = self._generate_image_with_retry(
+                    prompt, image_path, req.id
+                )
 
-                    if success:
-                        image_paths.append(str(image_path))
-                        self.db.update_image_request(
-                            req_id=req.id,
-                            image_path=str(image_path),
-                            success=True,
-                        )
-                    else:
-                        self.db.update_image_request(
-                            req_id=req.id,
-                            image_path="",
-                            success=False,
-                            error_message="No image data in response",
-                        )
+                if success:
+                    image_paths.append(str(image_path))
+                else:
+                    # Log failure details
+                    print(f"⚠️ Image {i} failed after {retries} retries: {error_msg[:100]}...")
 
-                except Exception as e:
-                    self.db.update_image_request(
-                        req_id=req.id,
-                        image_path="",
-                        success=False,
-                        error_message=str(e),
-                    )
+            # Update generation with timing
+            total_duration = time.time() - total_start_time
+            self.db.update_generation_timing(
+                generation_id,
+                image_duration_seconds=total_duration,
+            )
 
             if not image_paths:
                 raise ValueError("No images were generated successfully")

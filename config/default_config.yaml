@@ -1,0 +1,40 @@
+# AI Podcast Generator Configuration
+
+# Topic categories (select one at runtime)
+topics:
+  life_tips: "生活常识"          # Daily life knowledge
+  health: "健康保养"             # Health & wellness
+  history: "历史野史"            # Historical stories
+  curiosity: "猎奇故事"          # Curiosity & mysteries
+
+# Dialogue settings
+dialogue:
+  target_duration_seconds: 60    # ~1 minute speaking time
+  target_word_count: 180         # ~180 Chinese characters for 1 min
+  language: "zh"                 # Chinese
+  speakers:
+    - name: "王阿姨"
+      voice_id: "aMSt68OGf4xUZAnLpTU8"
+      role: "主持人"
+    - name: "小唐"
+      voice_id: "iP95p4xoKVk53GoZ742B"
+      role: "嘉宾"
+
+# Image generation settings
+images:
+  count_per_lines: 2              # Generate 1 image per N dialogue lines
+  min_count: 3                    # Minimum images
+  max_count: 10                   # Maximum images
+  aspect_ratio: "16:9"            # Video format
+  style: "realistic illustration, warm colors, podcast visual style"
+
+# Output settings
+output:
+  directory: "./output"
+  video_format: "mp4"
+  video_resolution: "1920x1080"
+  audio_format: "mp3"
+
+# Database settings
+database:
+  path: "./data/podcast_generator.db"

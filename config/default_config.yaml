@@ -13,7 +13,7 @@ dialogue:
   target_word_count: 180         # ~180 Chinese characters for 1 min
   language: "zh"                 # Chinese
   speakers:
-    - name: "王阿姨"
+    - name: "周阿姨"
       voice_id: "aMSt68OGf4xUZAnLpTU8"
       role: "主持人"
     - name: "小唐"

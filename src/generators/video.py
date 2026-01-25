@@ -133,15 +133,10 @@ class VideoGenerator:
             input_duration = duration + self.transition_duration
             inputs.extend(["-loop", "1", "-t", str(input_duration), "-i", img_path])
 
-            # Scale, pad, and add Ken Burns effect (slow zoom)
-            # Also add fade transitions between images
-            zoom_start = 1.0
-            zoom_end = 1.05  # Subtle 5% zoom
-
+            # Simple scale and pad (no Ken Burns zoom - much faster)
             filter_chain = (
-                f"[{i}:v]scale={width_int * 2}:{height_int * 2},"
-                f"zoompan=z='min(zoom+0.0002,{zoom_end})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                f"d={int(duration * 25)}:s={width}x{height}:fps=25,"
+                f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"setsar=1"
             )
 

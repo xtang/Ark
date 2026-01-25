@@ -300,10 +300,10 @@ class ImageGenerator:
 
                 if success:
                     image_paths.append(str(image_path))
-                    # Rate limit: wait 5s between successful generations
+                    # Rate limit: wait 10s between successful generations
                     if i < len(scenes[:image_count]) - 1:  # Don't wait after the last one
-                        print("⏳ Waiting 5s for rate limit...")
-                        time.sleep(5)
+                        print("⏳ Waiting 10s for rate limit...")
+                        time.sleep(10)
                 else:
                     # Log failure details
                     print(f"⚠️ Image {i} failed after {retries} retries: {error_msg[:100]}...")

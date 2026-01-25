@@ -26,13 +26,14 @@ class ImageGenerator:
 请为每个场景生成一个详细的英文图片生成提示词（prompt），风格：{style}。
 注意：
 1. 每张图片的prompt应该具体描述场景中的人物、物体、环境
-2. 保持视觉风格一致
-3. 适合作为播客/短视频的配图
+2. 保持视觉风格一致，使用写实摄影风格（realistic photography）
+3. 如果场景涉及人物但未指定国籍，默认使用中国人（Chinese people）
+4. 适合作为播客/短视频的配图
 
 输出格式（JSON数组）：
 ```json
 [
-  {{"scene": "场景描述", "prompt": "English image generation prompt, detailed, high quality"}},
+  {{"scene": "场景描述", "prompt": "English image generation prompt, realistic photography style, Chinese people if nationality not specified, high quality, 4K"}},
   ...
 ]
 ```"""

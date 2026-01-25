@@ -2,6 +2,7 @@
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -260,14 +261,23 @@ class VideoGenerator:
 
         Returns:
             Path to generated video file.
-
-        Raises:
             Exception: If generation fails.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
-        output_path = output_dir / f"podcast_{generation_id}.{self.video_format}"
-
+        # Create DB record
+        req = self.db.create_video_output(generation_id, "", 0, self.resolution, 0, False)
+        
         try:
+            # Set cover image (save first image as cover.jpg)
+            if image_paths and len(image_paths) > 0:
+                cover_path = output_dir / "cover.jpg"
+                try:
+                    import shutil
+                    shutil.copy(image_paths[0], cover_path)
+                    print(f"🖼️ Cover image saved to: {cover_path}")
+                except Exception as e:
+                    print(f"⚠️ Failed to create cover image: {e}")
+
             # Calculate durations
             durations = self._calculate_image_durations(
                 audio_duration, voice_segments, len(image_paths)

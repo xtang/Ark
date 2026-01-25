@@ -10,7 +10,7 @@ topics:
 # Dialogue settings
 dialogue:
   target_duration_seconds: 90    # ~1 minute speaking time
-  target_word_count: 300         # ~250 Chinese characters for 1 min
+  target_word_count: 400         # ~250 Chinese characters for 1 min
   language: "zh"                 # Chinese
   speakers:
     - name: "周阿姨"

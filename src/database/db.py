@@ -424,3 +424,74 @@ class Database:
             success=success,
             error_message=error_message,
         )
+
+    # ==================== History Query Methods ====================
+
+    def get_dialogue_request(self, generation_id: int) -> Optional[DialogueRequest]:
+        """Get dialogue request for a generation."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM dialogue_requests WHERE generation_id = ?",
+            (generation_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return DialogueRequest(
+            id=row["id"],
+            generation_id=row["generation_id"],
+            prompt=row["prompt"],
+            response_raw=row["response_raw"] or "",
+            dialogue_json=row["dialogue_json"] or "",
+            references=row["references_json"] or "",
+            summary=row["summary"] or "",
+            word_count=row["word_count"],
+            success=bool(row["success"]),
+            error_message=row["error_message"],
+        )
+
+    def get_audio_request(self, generation_id: int) -> Optional[AudioRequest]:
+        """Get audio request for a generation."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM audio_requests WHERE generation_id = ?",
+            (generation_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return AudioRequest(
+            id=row["id"],
+            generation_id=row["generation_id"],
+            dialogue_count=row["dialogue_count"],
+            audio_path=row["audio_path"] or "",
+            duration_seconds=row["duration_seconds"],
+            voice_segments_json=row["voice_segments_json"] or "",
+            success=bool(row["success"]),
+            error_message=row["error_message"],
+        )
+
+    def get_video_output(self, generation_id: int) -> Optional[VideoOutput]:
+        """Get video output for a generation."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            "SELECT * FROM video_outputs WHERE generation_id = ?",
+            (generation_id,),
+        )
+        row = cursor.fetchone()
+        if not row:
+            return None
+
+        return VideoOutput(
+            id=row["id"],
+            generation_id=row["generation_id"],
+            video_path=row["video_path"] or "",
+            duration_seconds=row["duration_seconds"],
+            resolution=row["resolution"] or "",
+            file_size_bytes=row["file_size_bytes"],
+            success=bool(row["success"]),
+            error_message=row["error_message"],
+        )
+

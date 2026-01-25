@@ -60,7 +60,7 @@ class ImageGenerator:
             vertexai=True,
             api_key=api_key,
         )
-        self.text_model = "gemini-3-flash-preview"
+        self.text_model = "gemini-3-pro-preview"
         self.image_model = "gemini-2.5-flash-image"
 
         # Dynamic image count settings

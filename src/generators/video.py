@@ -33,7 +33,7 @@ class VideoGenerator:
         # Animation settings
         self.fade_duration = 1.0  # seconds for fade in/out
         self.transition_duration = 0.5  # seconds for image transitions
-        self.subtitle_margin = 60  # pixels from bottom
+        self.subtitle_margin = 20  # pixels from bottom (lower = closer to bottom)
 
     def _calculate_image_durations(
         self,
@@ -86,17 +86,20 @@ class VideoGenerator:
                 start_time = segment.get("start_time_seconds", i * 5)
                 end_time = segment.get("end_time_seconds", start_time + 5)
 
-                speaker = line.get("speaker", "")
-                text = line.get("text", "")
+                # Delay first subtitle to account for video fade in
+                if i == 0:
+                    start_time = max(start_time, self.fade_duration)
+
+                text = line.get("text", "")  # No speaker label
 
                 # Format time as HH:MM:SS,mmm
                 start_str = self._format_srt_time(start_time)
                 end_str = self._format_srt_time(end_time)
 
-                # Write SRT entry
+                # Write SRT entry (text only, no speaker)
                 f.write(f"{i + 1}\n")
                 f.write(f"{start_str} --> {end_str}\n")
-                f.write(f"<b>{speaker}</b>: {text}\n\n")
+                f.write(f"{text}\n\n")
 
         return str(srt_path)
 

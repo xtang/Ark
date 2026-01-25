@@ -264,6 +264,8 @@ class VideoGenerator:
             Exception: If generation fails.
         """
         output_dir.mkdir(parents=True, exist_ok=True)
+        output_path = output_dir / f"podcast_{generation_id}.{self.video_format}"
+
         # Create DB record
         req = self.db.create_video_output(generation_id, "", 0, self.resolution, 0, False)
         

@@ -3,6 +3,7 @@
 import argparse
 import json
 import sys
+import traceback
 from pathlib import Path
 
 from .config import load_config, get_topic_name
@@ -72,6 +73,119 @@ def run_cli(topic_key: str, config_path: str | None = None) -> None:
         db.close()
 
 
+def resume_cli(gen_id: int, config_path: str | None = None) -> None:
+    """Resume a failed generation from the last successful stage."""
+    config = load_config(config_path)
+    db = Database(config["database"]["path"])
+    output_dir = Path(config["output"]["directory"])
+
+    try:
+        gen = db.get_generation(gen_id)
+        if not gen:
+            print(f"❌ 找不到 ID 为 {gen_id} 的生成记录")
+            sys.exit(1)
+            
+        print(f"🔄 恢复生成: #{gen.id} {gen.topic_name} (状态: {gen.status})")
+        gen_output_dir = output_dir / f"gen_{gen.id}"
+        gen_output_dir.mkdir(parents=True, exist_ok=True)
+
+        # Reconstruct generation state
+        dialogue = []
+        references = []
+        summary = ""
+        audio_path = ""
+        duration = 0.0
+        voice_segments = []
+        image_paths = []
+
+        # --- Check Step 1: Dialogue ---
+        # We need to know if dialogue was completed.
+        # Check explicit status or query dialogue_request
+        dialogue_req = db.get_dialogue_request(gen.id)
+        
+        if dialogue_req and dialogue_req.success and gen.dialogue_json_path:
+            print(f"📝 Step 1/4: 对话内容已生成 (跳过)")
+            dialogue = dialogue_req.get_dialogue()
+            references = dialogue_req.get_references()
+            summary = dialogue_req.summary
+        else:
+            print("📝 Step 1/4: 重新生成对话内容...")
+            dialogue_gen = DialogueGenerator(config, db)
+            dialogue, references, summary = dialogue_gen.generate(
+                gen.id, gen.topic_key, gen.topic_name, gen_output_dir
+            )
+            print(f"  ✓ 完成，共 {len(dialogue)} 句对话")
+        
+        # --- Check Step 2: Audio ---
+        audio_req = db.get_audio_request(gen.id)
+        # Check if audio file exists
+        audio_exists = audio_req and audio_req.audio_path and Path(audio_req.audio_path).exists()
+        
+        if audio_req and audio_req.success and audio_exists:
+            print(f"🔊 Step 2/4: 语音已生成 (跳过)")
+            audio_path = audio_req.audio_path
+            duration = audio_req.duration_seconds
+            voice_segments = audio_req.get_voice_segments()
+        else:
+            print("🔊 Step 2/4: 重新生成语音...")
+            audio_gen = AudioGenerator(config, db)
+            audio_path, duration, voice_segments = audio_gen.generate(
+                gen.id, dialogue, gen_output_dir
+            )
+            print(f"  ✓ 完成，时长 {duration:.1f} 秒")
+
+        # --- Check Step 3: Images ---
+        # Check generation status for 'images_complete' or 'audio_complete' vs others
+        # Ideally check status flag. 'images_complete' means all images done.
+        # But if it failed midway, we re-run all images for simplicity (idempotency depends on prompt logic but safe to overwrite)
+        
+        # Check DB images
+        image_reqs = db.get_image_requests(gen.id)
+        # Simple check: are there enough successful images?
+        min_count = config.get("images", {}).get("min_count", 3)
+        successful_images = [img for img in image_reqs if img.success and Path(img.image_path).exists()]
+        
+        if gen.status in ["images_complete", "completed"] and len(successful_images) >= min_count:
+             print(f"🖼️ Step 3/4: 图片已生成 (跳过，共 {len(successful_images)} 张)")
+             image_paths = [img.image_path for img in successful_images]
+        else:
+            if successful_images:
+                print(f"🖼️ Step 3/4: 图片生成不完整 (现有 {len(successful_images)} 张)，重新生成所有图片...")
+            else:
+                print("🖼️ Step 3/4: 生成图片...")
+            
+            image_gen = ImageGenerator(config, db)
+            image_paths = image_gen.generate(gen.id, dialogue, summary, gen_output_dir)
+            print(f"  ✓ 完成，共 {len(image_paths)} 张图片")
+
+        # --- Step 4: Video ---
+        video_out = db.get_video_output(gen.id)
+        video_exists = video_out and video_out.video_path and Path(video_out.video_path).exists()
+        
+        if video_exists and video_out.success:
+             print(f"🎬 Step 4/4: 视频已生成 (跳过)")
+             video_path = video_out.video_path
+        else:
+            print("🎬 Step 4/4: 生成视频...")
+            video_gen = VideoGenerator(config, db)
+            video_path = video_gen.generate(
+                gen.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
+                dialogue=dialogue
+            )
+            print(f"  ✓ 完成!")
+
+        print(f"\n✅ 视频已恢复/生成: {video_path}")
+        
+    except Exception as e:
+        import traceback
+        print(f"\n❌ 恢复生成失败: {e}")
+        print("🔍 错误详情:")
+        traceback.print_exc()
+        sys.exit(1)
+    finally:
+        db.close()
+
+
 def show_history(config_path: str | None = None, limit: int = 10) -> None:
     """Show recent generation history."""
     config = load_config(config_path)
@@ -85,7 +199,7 @@ def show_history(config_path: str | None = None, limit: int = 10) -> None:
             return
 
         print(f"\n📋 最近 {len(generations)} 条生成记录:\n")
-        print(f"{'ID':<5} {'状态':<12} {'主题':<12} {'视频路径'}")
+        print(f"{'ID':<5} {'状态':<15} {'主题':<12} {'视频路径'}")
         print("-" * 80)
 
         for gen in generations:
@@ -93,7 +207,7 @@ def show_history(config_path: str | None = None, limit: int = 10) -> None:
             video_path = gen.video_path or "-"
             if len(video_path) > 40:
                 video_path = "..." + video_path[-37:]
-            print(f"{gen.id:<5} {status_icon} {gen.status:<10} {gen.topic_name:<12} {video_path}")
+            print(f"{gen.id:<5} {status_icon} {gen.status:<14} {gen.topic_name:<12} {video_path}")
 
     finally:
         db.close()
@@ -211,6 +325,9 @@ Examples:
   # Show generation history
   uv run python -m src.main --history
 
+  # Resume a failed generation
+  uv run python -m src.main --resume 14
+
   # Show details for a specific session
   uv run python -m src.main --show 5
 
@@ -246,6 +363,14 @@ Available topics:
     )
 
     parser.add_argument(
+        "--resume",
+        "-r",
+        type=int,
+        metavar="ID",
+        help="Resume a failed generation from last successful stage",
+    )
+
+    parser.add_argument(
         "--show",
         "-s",
         type=int,
@@ -265,6 +390,8 @@ Available topics:
 
     if args.history:
         show_history(args.config, args.limit)
+    elif args.resume:
+        resume_cli(args.resume, args.config)
     elif args.show:
         show_session(args.show, args.config)
     elif args.topic:

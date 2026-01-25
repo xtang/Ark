@@ -63,7 +63,10 @@ def run_cli(topic_key: str, config_path: str | None = None) -> None:
             print(f"   • {ref}")
 
     except Exception as e:
+        import traceback
         print(f"\n❌ 生成失败: {e}")
+        print("🔍 错误详情:")
+        traceback.print_exc()
         sys.exit(1)
     finally:
         db.close()

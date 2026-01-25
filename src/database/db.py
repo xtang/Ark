@@ -622,4 +622,3 @@ class Database:
             success=bool(row["success"]),
             error_message=row["error_message"],
         )
-

@@ -15,8 +15,8 @@ from ..database import Database
 class ImageGenerator:
     """Generate podcast images using Gemini AI."""
 
-    SCENE_PROMPT_TEMPLATE = """分析以下播客对话内容，提取{count}个最适合可视化的关键场景或概念。
-每个场景应该对应对话中的不同部分，确保视觉内容与对话进度同步。
+    SCENE_PROMPT_TEMPLATE = """分析以下播客对话内容，你必须提取【恰好{count}个】最适合可视化的关键场景。
+这非常重要：你必须返回恰好 {count} 个场景，不能多也不能少！
 
 对话内容：
 {dialogue_text}
@@ -24,17 +24,19 @@ class ImageGenerator:
 对话主题：{summary}
 
 请为每个场景生成一个详细的英文图片生成提示词（prompt），风格：{style}。
-注意：
-1. 每张图片的prompt应该具体描述场景中的人物、物体、环境
-2. 保持视觉风格一致，使用写实摄影风格（realistic photography）
-3. 如果场景涉及人物但未指定国籍，默认使用中国人（Chinese people）
-4. 适合作为播客/短视频的配图
+要求：
+1. 必须返回恰好 {count} 个场景（JSON数组长度必须是 {count}）
+2. 每张图片的prompt应该具体描述场景中的人物、物体、环境
+3. 保持视觉风格一致，使用写实摄影风格（realistic photography）
+4. 如果场景涉及人物但未指定国籍，默认使用中国人（Chinese people）
+5. 场景应均匀分布在对话的不同部分
 
-输出格式（JSON数组）：
+输出格式（JSON数组，必须有 {count} 个元素）：
 ```json
 [
-  {{"scene": "场景描述", "prompt": "English image generation prompt, realistic photography style, Chinese people if nationality not specified, high quality, 4K"}},
-  ...
+  {{"scene": "场景1描述", "prompt": "English prompt for scene 1, realistic photography, Chinese people, 4K"}},
+  {{"scene": "场景2描述", "prompt": "English prompt for scene 2, realistic photography, Chinese people, 4K"}},
+  ... (共 {count} 个)
 ]
 ```"""
 

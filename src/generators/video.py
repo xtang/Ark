@@ -90,13 +90,16 @@ class VideoGenerator:
                 if i == 0:
                     start_time = max(start_time, self.fade_duration)
 
-                text = line.get("text", "")  # No speaker label
+                text = line.get("text", "")
+                # Remove mood/background markers like [笑声], [惊讶] etc.
+                import re
+                text = re.sub(r'\[.*?\]', '', text).strip()
 
                 # Format time as HH:MM:SS,mmm
                 start_str = self._format_srt_time(start_time)
                 end_str = self._format_srt_time(end_time)
 
-                # Write SRT entry (text only, no speaker)
+                # Write SRT entry (text only, no speaker, no markers)
                 f.write(f"{i + 1}\n")
                 f.write(f"{start_str} --> {end_str}\n")
                 f.write(f"{text}\n\n")

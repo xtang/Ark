@@ -26,7 +26,7 @@ images:
   min_count: 3                    # Minimum images
   max_count: 10                   # Maximum images
   aspect_ratio: "16:9"            # Video format
-  style: "realistic photography, natural lighting, Chinese people, high quality, 4K"
+  style: "realistic photography, natural lighting, Chinese people, high quality"
 
 # Output settings
 output:

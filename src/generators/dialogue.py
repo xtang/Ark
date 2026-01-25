@@ -118,7 +118,7 @@ class DialogueGenerator:
         Raises:
             Exception: If generation fails.
         """
-        """
+
         # Fetch recent history to avoid repetition
         history = self.db.get_topic_summary_history(topic_key, limit=5)
         prompt = self._build_prompt(topic_name, history)

@@ -24,6 +24,8 @@ class DialogueGenerator:
 3. **对话者**：{speakers_desc}
 4. **风格**：生动有趣，适合播客收听，可以包含情感标记如 [笑声]、[惊讶] 等
 5. **结构**：有开场、主体内容、结尾
+6. **避免重复**：请避开以下最近已经讨论过的内容：
+{history}
 
 ## 输出格式
 请严格按照以下JSON格式输出，不要包含任何其他文字：
@@ -60,7 +62,7 @@ class DialogueGenerator:
         )
         self.model = "gemini-3-flash-preview"
 
-    def _build_prompt(self, topic_name: str) -> str:
+    def _build_prompt(self, topic_name: str, history: list[str]) -> str:
         """Build the prompt for dialogue generation."""
         speakers = self.config.get("dialogue", {}).get("speakers", [])
         speakers_desc = "、".join(
@@ -69,10 +71,13 @@ class DialogueGenerator:
 
         word_count = self.config.get("dialogue", {}).get("target_word_count", 180)
 
+        history_text = "\n".join(f"- {h}" for h in history) if history else "（无）"
+
         return self.PROMPT_TEMPLATE.format(
             topic=topic_name,
             word_count=word_count,
             speakers_desc=speakers_desc,
+            history=history_text,
         )
 
     def _extract_json(self, text: str) -> dict:
@@ -113,7 +118,10 @@ class DialogueGenerator:
         Raises:
             Exception: If generation fails.
         """
-        prompt = self._build_prompt(topic_name)
+        """
+        # Fetch recent history to avoid repetition
+        history = self.db.get_topic_summary_history(topic_key, limit=5)
+        prompt = self._build_prompt(topic_name, history)
 
         # Create DB record
         req = self.db.create_dialogue_request(generation_id, prompt)

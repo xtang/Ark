@@ -66,11 +66,15 @@ class VideoGenerator:
                 duration = end_time - start_time
                 durations.append(max(0.5, duration))  # Minimum 0.5s per image
 
+            # Extend the last image by 2 seconds to match audio padding
+            if durations:
+                durations[-1] += 2.0
+
             return durations
 
-        # Fallback: equal distribution
-        duration_per_image = audio_duration / num_images
-        return [duration_per_image] * num_images
+        # Fallback to equal distribution if no segments
+        base_duration = (audio_duration + 2.0) / num_images  # Include padding in calculation
+        return [base_duration] * num_images
 
     def _create_subtitle_file(
         self,
@@ -185,7 +189,8 @@ class VideoGenerator:
         filter_parts.extend(concat_parts)
 
         # Add final fade out at video end
-        fade_out_start = audio_duration - self.fade_duration
+        # Add 2 seconds padding at the end so audio doesn't cut off abruptly
+        fade_out_start = audio_duration + 2.0 - self.fade_duration
         filter_parts.append(
             f"[vconcat]fade=t=out:st={fade_out_start}:d={self.fade_duration}[vfaded]"
         )
@@ -201,10 +206,11 @@ class VideoGenerator:
         else:
             filter_parts.append("[vfaded]copy[outv]")
 
-        # Add audio fade in/out
+        # Add audio fade in/out with 2s padding at end
         audio_fade = (
-            f"[{audio_input_idx}:a]afade=t=in:st=0:d={self.fade_duration},"
-            f"afade=t=out:st={audio_duration - self.fade_duration}:d={self.fade_duration}[outa]"
+            f"[{audio_input_idx}:a]apad=pad_dur=2,"
+            f"afade=t=in:st=0:d={self.fade_duration},"
+            f"afade=t=out:st={audio_duration + 2.0 - self.fade_duration}:d={self.fade_duration}[outa]"
         )
         filter_parts.append(audio_fade)
 

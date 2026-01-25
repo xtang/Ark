@@ -285,6 +285,22 @@ class Database:
             for row in rows
         ]
 
+    def get_topic_summary_history(self, topic_key: str, limit: int = 5) -> list[str]:
+        """Get recent summaries for a specific topic to avoid repetition."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT d.summary
+            FROM dialogue_requests d
+            JOIN generations g ON d.generation_id = g.id
+            WHERE g.topic_key = ? AND d.success = 1 AND d.summary != ''
+            ORDER BY g.created_at DESC
+            LIMIT ?
+            """,
+            (topic_key, limit),
+        )
+        return [row["summary"] for row in cursor.fetchall()]
+
     # ==================== Dialogue Request CRUD ====================
 
     def create_dialogue_request(self, generation_id: int, prompt: str) -> DialogueRequest:

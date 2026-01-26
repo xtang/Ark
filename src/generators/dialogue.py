@@ -52,6 +52,7 @@ class DialogueGenerator:
         topic_name: str,
         history: list[str],
         stock_code: str | None = None,
+        language: str = "CN",
     ) -> str:
         """Build the prompt for dialogue generation."""
         speakers = self.config.get("dialogue", {}).get("speakers", [])
@@ -61,6 +62,10 @@ class DialogueGenerator:
 
         word_count = self.config.get("dialogue", {}).get("target_word_count", 180)
         history_text = "\n".join(f"- {h}" for h in history) if history else "（无）"
+        
+        # Get language instruction
+        lang_instructions = self.prompts.get("language_instructions", {})
+        lang_instr = lang_instructions.get(language, "请全程使用中文进行对话。")
 
         # Use stock-specific prompt if stock_code is provided
         if stock_code:
@@ -70,6 +75,7 @@ class DialogueGenerator:
                 word_count=word_count,
                 speakers_desc=speakers_desc,
                 history=history_text,
+                language_instruction=lang_instr,
             )
 
         template = self.prompts.get("default", "")
@@ -78,6 +84,7 @@ class DialogueGenerator:
             word_count=word_count,
             speakers_desc=speakers_desc,
             history=history_text,
+            language_instruction=lang_instr,
         )
 
     def _extract_json(self, text: str) -> dict:
@@ -103,6 +110,7 @@ class DialogueGenerator:
         topic_name: str,
         output_dir: Path,
         stock_code: str | None = None,
+        language: str = "CN",
     ) -> tuple[list[dict], list[str], str, str]:
         """
         Generate dialogue content for a topic.
@@ -113,6 +121,7 @@ class DialogueGenerator:
             topic_name: Topic display name.
             output_dir: Directory to save output files.
             stock_code: Optional stock code for stock_talk topic.
+            language: Output language code ("CN" or "EN").
 
         Returns:
             Tuple of (dialogue list, references list, summary, title).
@@ -123,7 +132,7 @@ class DialogueGenerator:
 
         # Fetch recent history to avoid repetition
         history = self.db.get_topic_summary_history(topic_key, limit=5)
-        prompt = self._build_prompt(topic_name, history, stock_code=stock_code)
+        prompt = self._build_prompt(topic_name, history, stock_code=stock_code, language=language)
 
         # Create DB record
         req = self.db.create_dialogue_request(generation_id, prompt)

@@ -5,6 +5,8 @@
 # Default prompt for general topics (life_tips, health, history, curiosity)
 default: |
   你是一个专业的播客内容生成器。请生成一段关于「{topic}」的双人对话脚本。
+  
+  {language_instruction}
 
   ## 要求
   1. **内容真实可查**：所有信息必须是真实的，观众可以在网上找到相关参考资料
@@ -47,7 +49,12 @@ default: |
 # Stock talk prompt template
 stock_talk: |
   你是一个专业的财经播客内容生成器。请根据股票代码「{stock_code}」生成一段关于该公司的双人对话脚本。
-
+  
+  {language_instructions:
+  CN: "请全程使用中文进行对话。"
+  EN: "Please generate the dialogue entirely in English."
+  JP: "Please generate the dialogue entirely in Japanese."
+  }
   ## 任务
   首先，请使用 Google Search 工具查找该公司的最新信息。
   请识别股票代码对应的公司（支持全球市场：美股如AAPL、A股如600519、港股如00700.HK等）。

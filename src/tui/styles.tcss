@@ -1,7 +1,22 @@
-/* Global Styles */
+/* Tokyo Night Theme Definitions */
+
+/* Core Palette */
+$bg: #1a1b26;           /* Tokyo Night Background */
+$panel-bg: #24283b;     /* Slightly lighter for panels */
+$fg: #c0caf5;           /* Foreground Text */
+$muted: #565f89;        /* Muted Text / Borders */
+
+/* Accents */
+$primary: #7aa2f7;      /* Blue */
+$secondary: #bb9af7;    /* Magenta */
+$accent: #7dcfff;       /* Cyan */
+$success: #9ece6a;      /* Green */
+$warning: #e0af68;      /* Yellow/Orange */
+$error: #f7768e;        /* Red */
+
 Screen {
-    background: $surface;
-    color: $text;
+    background: $bg;
+    color: $fg;
 }
 
 /* Sidebar (Session List) */
@@ -10,35 +25,41 @@ Screen {
     height: 100%;
     dock: left;
     border: round $primary;
-    background: $panel;
+    background: $panel-bg;
     margin: 0 1 1 1;
+    color: $fg;
 }
 
 #sidebar-header {
     height: 3;
     content-align: center middle;
     background: $primary;
-    color: $text;
+    color: $bg; /* Contrast text on primary block */
     text-style: bold;
 }
 
 SessionList {
     height: 1fr;
     scrollbar-size: 1 1;
+    background: $panel-bg;
 }
 
 SessionList > ListItem {
     padding: 1;
-    border-bottom: solid $surface-lighten-1;
+    border-bottom: solid $muted;
+    background: $panel-bg;
+    color: $fg;
 }
 
 SessionList > ListItem:hover {
-    background: $surface-lighten-1;
+    background: $bg;
+    color: $accent;
+    border-left: thick $accent; /* add a nice indicator on hover */
 }
 
 SessionList > ListItem.--highlight {
-    background: $secondary;
-    color: $text;
+    background: $muted;
+    color: $fg;
     text-style: bold;
 }
 
@@ -46,8 +67,8 @@ SessionList > ListItem.--highlight {
 #main-content {
     height: 100%;
     margin: 0 1 1 0;
-    border: round $accent;
-    background: $surface;
+    border: round $secondary;
+    background: $panel-bg;
 }
 
 /* Dashboard View */
@@ -55,44 +76,55 @@ Dashboard {
     layout: vertical;
     align: center middle;
     padding: 2;
+    background: $panel-bg;
+}
+
+.title {
+    color: $secondary;
+    text-style: bold;
+    margin-bottom: 2;
 }
 
 .stats-container {
     layout: horizontal;
     height: auto;
-    margin-bottom: 2;
+    margin-bottom: 4;
     align: center middle;
 }
 
 .stat-card {
-    width: 20;
+    width: 24;
     height: 10;
-    border: round $success;
-    margin: 1;
+    border: round $accent;
+    background: $bg;
+    margin: 1 2;
     align: center middle;
     content-align: center middle;
 }
 
 .stat-value {
     text-style: bold;
-    color: $success;
+    color: $accent;
+    margin-top: 1;
 }
 
 .stat-label {
-    color: $text-muted;
+    color: $muted;
+    text-style: bold;
 }
 
 /* Session View */
 SessionView {
     layout: vertical;
     height: 100%;
+    background: $panel-bg;
 }
 
 #session-header {
     height: 3;
     padding: 0 1;
-    border-bottom: solid $accent;
-    background: $surface-lighten-1;
+    border-bottom: solid $secondary;
+    background: $bg;
     layout: horizontal;
     align-vertical: middle;
 }
@@ -100,58 +132,126 @@ SessionView {
 #session-title {
     width: 1fr;
     text-style: bold;
-    color: $accent;
+    color: $secondary;
 }
 
 #session-status {
     width: auto;
     padding: 0 2;
-    background: $surface;
-    border: round gray;
+    background: $panel-bg;
+    border: round $muted;
+    color: $fg;
+    text-style: bold;
 }
 
 .log-container {
     height: 1fr;
-    border: solid $secondary;
+    border: solid $muted;
     margin: 1;
-    background: $surface-darken-1;
+    background: $bg;
     overflow-y: scroll;
 }
 
 Log {
-    background: transparent;
+    background: $bg;
+    color: $fg;
+    scrollbar-gutter: stable;
 }
 
 #session-actions {
     height: auto;
     padding: 1;
     align: right middle;
-    border-top: solid $surface-lighten-1;
+    border-top: solid $muted;
+    background: $panel-bg;
 }
 
 /* Dialogs / Modals */
 NewGenerationModal {
     align: center middle;
+    background: rgba(26, 27, 38, 0.8); /* Semi-transparent Tokyo Night BG */
 }
 
 #modal-dialog {
     width: 60;
     height: auto;
     border: thick $primary;
-    background: $surface;
+    background: $panel-bg;
     padding: 2;
 }
 
 #modal-title {
     text-style: bold;
+    color: $primary;
     content-align: center middle;
     margin-bottom: 2;
+}
+
+.modal-section-title {
+    color: $secondary;
+    text-style: bold;
+    margin-bottom: 1;
+    margin-top: 1;
+}
+
+RadioSet {
+    background: transparent;
+    border: none;
+    margin-bottom: 2;
+    layout: horizontal;
+    align: center middle;
+    height: auto;
+}
+
+RadioButton {
+    width: auto;
+    background: transparent;
+    border: none;
+    color: $fg;
+    margin-right: 2;
+}
+
+RadioButton:hover {
+    color: $accent;
+    background: $bg;
+} 
+
+RadioButton.-on {
+    color: $primary;
+    text-style: bold;
 }
 
 .topic-button {
     width: 100%;
     margin-bottom: 1;
+    border: solid $muted; /* Default border */
+    background: transparent; /* No fill by default */
+    color: $fg;
 }
+
+.topic-button:hover {
+    background: $bg;
+    border: solid $accent; /* Highlight border on hover */
+    color: $accent;
+}
+
+.topic-button:focus {
+    background: $bg;
+    border: solid $accent;
+    color: $accent;
+}
+
+/* Specific variants for buttons also use borders now */
+.topic-button.-primary {
+    border: solid $primary;
+    color: $primary;
+}
+
+.topic-button.-error {
+    border: solid $error;
+    color: $error;
+}
+
 
 /* Utility Classes */
 .text-success { color: $success; }
@@ -159,11 +259,39 @@ NewGenerationModal {
 .text-warning { color: $warning; }
 .text-accent { color: $accent; }
 
+/* Global Button Styles - Outline Only */
 Button {
-    border: none;
     height: 3;
+    background: transparent;
+    border: solid $primary; /* Outline */
+    color: $primary;
+    text-style: bold;
 }
+
 Button:hover {
-    background: $accent;
-    color: $text;
+    background: $bg;
+    border: solid $accent;
+    color: $accent;
+}
+
+Button:focus {
+    background: $bg;
+    border: solid $accent;
+    color: $accent;
+}
+
+Button.-success {
+    border: solid $success;
+    color: $success;
+}
+
+Button.-error {
+    border: solid $error;
+    color: $error;
+}
+
+Button:disabled {
+    border: solid $muted;
+    opacity: 0.5;
+    color: $muted;
 }

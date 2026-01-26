@@ -16,6 +16,8 @@ from textual.widgets import (
     ListView,
     ListItem,
     ContentSwitcher,
+    RadioSet,
+    RadioButton,
 )
 from textual.screen import ModalScreen
 from textual.binding import Binding
@@ -27,27 +29,51 @@ from ..database import Database
 from ..generators import DialogueGenerator, AudioGenerator, ImageGenerator, VideoGenerator
 
 
-class NewGenerationModal(ModalScreen[str]):
+class NewGenerationModal(ModalScreen[dict]):
     """Modal for selecting a topic for new generation."""
+
+    BINDINGS = [
+        Binding("escape", "dismiss_modal", "Cancel"),
+        Binding("up", "focus_previous", "Up"),
+        Binding("down", "focus_next", "Down"),
+    ]
 
     def __init__(self, topics: dict[str, str]):
         super().__init__()
         self.topics = topics
+        self.selected_language = "CN"
+
+    def action_dismiss_modal(self) -> None:
+        self.dismiss(None)
 
     def compose(self) -> ComposeResult:
         with Container(id="modal-dialog"):
-            yield Label("Select Topic / 选择主题", id="modal-title")
+            yield Label("Select Language / 选择语言", classes="modal-section-title")
+            with RadioSet(id="language-radio"):
+                yield RadioButton("中文 (Chinese)", value=True, id="lang-CN")
+                yield RadioButton("English", id="lang-EN")
+                yield RadioButton("日本語 (Japanese)", id="lang-JP")
+            
+            yield Label("Select Topic / 选择主题", classes="modal-section-title")
             with Vertical():
                 for key, name in self.topics.items():
                     yield Button(f"{name}", id=f"topic-{key}", classes="topic-button", variant="primary")
             yield Button("Cancel / 取消", id="cancel", classes="topic-button", variant="error")
+
+    def on_radio_set_changed(self, event: RadioSet.Changed) -> None:
+        if event.pressed.id == "lang-EN":
+            self.selected_language = "EN"
+        elif event.pressed.id == "lang-JP":
+            self.selected_language = "JP"
+        else:
+            self.selected_language = "CN"
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel":
             self.dismiss(None)
         elif event.button.id and event.button.id.startswith("topic-"):
             topic_key = event.button.id.replace("topic-", "")
-            self.dismiss(topic_key)
+            self.dismiss({"topic": topic_key, "language": self.selected_language})
 
 
 class SessionListItem(ListItem):
@@ -199,14 +225,14 @@ class PodcastGeneratorApp(App):
             self.notify("⚠️ Generation in progress...", severity="warning")
             return
             
-        def handle_topic(topic_key: str | None) -> None:
-            if topic_key:
-                self._start_generation(topic_key)
+        def handle_topic(result: dict | None) -> None:
+            if result and result.get("topic"):
+                self._start_generation(result["topic"], result.get("language", "CN"))
 
         self.push_screen(NewGenerationModal(self.config.get("topics", {})), handle_topic)
 
     @work(thread=True)
-    def _start_generation(self, topic_key: str) -> None:
+    def _start_generation(self, topic_key: str, language: str = "CN") -> None:
         self.is_generating = True
         topic_name = get_topic_name(self.config, topic_key)
         output_dir = Path(self.config["output"]["directory"])
@@ -234,7 +260,7 @@ class PodcastGeneratorApp(App):
             def log(msg):
                 self.call_from_thread(session_view.log, msg)
 
-            log(f"🚀 Starting generation: {topic_name}")
+            log(f"🚀 Starting generation: {topic_name} [{language}]")
             
             # Step 1
             log("📝 Step 1/4: Dialogue Generation...")
@@ -249,7 +275,7 @@ class PodcastGeneratorApp(App):
                 log(f"ℹ️ Auto-selected stock: {stock_code}")
 
             dialogue, references, summary, title = dialogue_gen.generate(
-                generation.id, topic_key, topic_name, gen_output_dir, stock_code=stock_code
+                generation.id, topic_key, topic_name, gen_output_dir, stock_code=stock_code, language=language
             )
             log(f"✓ Dialogue complete. Title: {title}")
 

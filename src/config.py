@@ -86,3 +86,32 @@ def get_topic_name(config: dict[str, Any], topic_key: str) -> str:
     if topic_key not in topics:
         raise KeyError(f"Unknown topic: {topic_key}. Available: {list(topics.keys())}")
     return topics[topic_key]
+
+
+def get_prompts_path() -> Path:
+    """Get the path to the prompts config file."""
+    return Path(__file__).parent.parent / "config" / "prompts.yaml"
+
+
+def load_prompts(prompts_path: Path | str | None = None) -> dict[str, str]:
+    """
+    Load prompt templates from YAML file.
+
+    Args:
+        prompts_path: Path to prompts file. Uses default if None.
+
+    Returns:
+        Dictionary mapping prompt names to template strings.
+    """
+    if prompts_path is None:
+        prompts_path = get_prompts_path()
+
+    prompts_path = Path(prompts_path)
+
+    if not prompts_path.exists():
+        raise FileNotFoundError(f"Prompts file not found: {prompts_path}")
+
+    with open(prompts_path, "r", encoding="utf-8") as f:
+        prompts = yaml.safe_load(f)
+
+    return prompts or {}

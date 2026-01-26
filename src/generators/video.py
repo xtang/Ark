@@ -33,7 +33,7 @@ class VideoGenerator:
         self.video_format = config.get("output", {}).get("video_format", "mp4")
 
         # Animation settings
-        self.fade_duration = 1.0  # seconds for fade in/out
+        self.fade_duration = 0.3  # seconds for fade in/out (shorter = faster first frame)
         self.transition_duration = 0.5  # seconds for image transitions
         self.subtitle_margin = 20  # pixels from bottom (lower = closer to bottom)
         self.subtitle_font_size = config.get("output", {}).get("subtitle_font_size", 24)
@@ -190,16 +190,8 @@ class VideoGenerator:
             if i < len(image_paths) - 1:
                 filter_chain += f",fade=t=out:st={duration - self.transition_duration}:d={self.transition_duration}"
 
-            # Add fade in for first image (video start)
-            if i == 0:
-                # For zoompan, setsar is at the end, so we append fade
-                if self.enable_motion:
-                     filter_chain += f",fade=t=in:st=0:d={self.fade_duration}"
-                else:
-                    filter_chain = filter_chain.replace(
-                        "setsar=1",
-                        f"setsar=1,fade=t=in:st=0:d={self.fade_duration}"
-                    )
+            # NOTE: Fade-in for first image removed to ensure WeChat can show thumbnail
+            # Previously had fade=t=in:st=0 which caused first frame to be black
 
             filter_chain += f"[v{i}]"
             filter_parts.append(filter_chain)
@@ -290,13 +282,13 @@ class VideoGenerator:
             "-map", "[outv]",
             "-map", "[outa]",
             "-c:v", "libx264",
-            "-c:v", "libx264",
             "-preset", "veryfast",
             "-crf", "23",
             "-c:a", "aac",
             "-b:a", "128k",
             "-shortest",
             "-pix_fmt", "yuv420p",
+            "-movflags", "+faststart",  # Enables quick preview/thumbnail in WeChat
             output_path,
         ]
 

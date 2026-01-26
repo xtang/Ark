@@ -35,8 +35,18 @@ class AudioGenerator:
             raise ValueError("ELEVENLABS_API_KEY not found in environment")
 
         # Build speaker -> voice_id mapping
-        speakers = config.get("dialogue", {}).get("speakers", [])
-        self.voice_map = {s["name"]: s["voice_id"] for s in speakers}
+        speakers_config = config.get("dialogue", {}).get("speakers", [])
+        self.voice_map = {}
+        
+        if isinstance(speakers_config, dict):
+            # Flatten all languages into one map
+            for lang_speakers in speakers_config.values():
+                for s in lang_speakers:
+                    self.voice_map[s["name"]] = s["voice_id"]
+        else:
+            # Handle legacy list format
+            for s in speakers_config:
+                self.voice_map[s["name"]] = s["voice_id"]
 
     def _apply_speed_effect(self, input_path: Path, output_path: Path, speed_ratio: float) -> None:
         """Apply speed up effect using FFmpeg atempo filter."""

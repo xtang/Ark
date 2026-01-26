@@ -14,12 +14,27 @@ dialogue:
   target_word_count: 350         # ~250 Chinese characters for 1 min
   language: "zh"                 # Chinese
   speakers:
-    - name: "周阿姨"
-      voice_id: "aMSt68OGf4xUZAnLpTU8"
-      role: "主持人"
-    - name: "小唐"
-      voice_id: "iP95p4xoKVk53GoZ742B"
-      role: "嘉宾"
+    CN:
+      - name: "周阿姨"
+        voice_id: "aMSt68OGf4xUZAnLpTU8"
+        role: "主持人"
+      - name: "小唐"
+        voice_id: "iP95p4xoKVk53GoZ742B"
+        role: "嘉宾"
+    EN:
+      - name: "Sarah"
+        voice_id: "aMSt68OGf4xUZAnLpTU8"  # Using same voice for now
+        role: "Host"
+      - name: "Tom"
+        voice_id: "iP95p4xoKVk53GoZ742B"
+        role: "Guest"
+    JP:
+      - name: "中島さん"
+        voice_id: "aMSt68OGf4xUZAnLpTU8"
+        role: "MC"
+      - name: "田中さん"
+        voice_id: "iP95p4xoKVk53GoZ742B"
+        role: "Guest"
 
 # Image generation settings
 images:

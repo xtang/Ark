@@ -55,7 +55,22 @@ class DialogueGenerator:
         language: str = "CN",
     ) -> str:
         """Build the prompt for dialogue generation."""
-        speakers = self.config.get("dialogue", {}).get("speakers", [])
+        speakers_config = self.config.get("dialogue", {}).get("speakers", [])
+        
+        # Determine speakers based on language
+        if isinstance(speakers_config, dict):
+            # Pick by language, fallback to CN, then fallback to first available
+            speakers = speakers_config.get(language, speakers_config.get("CN"))
+            if not speakers and speakers_config:
+                 # Fallback to first available value if specific and default missing
+                 speakers = next(iter(speakers_config.values()))
+        else:
+            # Backward compatibility for list
+            speakers = speakers_config
+
+        if not speakers:
+             speakers = []
+
         speakers_desc = "、".join(
             f"{s['name']}（{s['role']}）" for s in speakers
         )

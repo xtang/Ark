@@ -325,6 +325,13 @@ class PodcastGeneratorApp(App):
             log("🖼️ Step 3/4: Image Generation...")
             image_gen = ImageGenerator(self.config, db)
             image_paths = image_gen.generate(generation.id, dialogue, summary, gen_output_dir, language=language)
+            
+            # Generate Cover
+            log("🎨 Generating Cover Art...")
+            cover_path = image_gen.generate_cover(generation.id, title, summary, gen_output_dir, language=language)
+            if cover_path:
+                log(f"✓ Cover art generated")
+            
             log(f"✓ Images complete: {len(image_paths)}")
 
             # Step 4
@@ -332,7 +339,7 @@ class PodcastGeneratorApp(App):
             video_gen = VideoGenerator(self.config, db)
             video_path = video_gen.generate(
                 generation.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
-                dialogue=dialogue, title=title
+                dialogue=dialogue, title=title, cover_image_path=cover_path
             )
             
             log(f"✅ Video Generated: {video_path}")

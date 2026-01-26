@@ -35,6 +35,10 @@ output:
   video_resolution: "1080x1920"
   audio_format: "mp3"
 
+# Audio processing settings
+audio:
+  speed_ratio: 1.25              # Speed up factor (e.g. 1.25x faster)
+
 # Database settings
 database:
   path: "./data/podcast_generator.db"

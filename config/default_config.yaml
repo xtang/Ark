@@ -37,7 +37,7 @@ output:
 
 # Audio processing settings
 audio:
-  speed_ratio: 1.25              # Speed up factor (e.g. 1.25x faster)
+  speed_ratio: 1.15              # Speed up factor (e.g. 1.25x faster)
 
 # Database settings
 database:

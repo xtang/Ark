@@ -12,7 +12,7 @@ from .generators import DialogueGenerator, AudioGenerator, ImageGenerator, Video
 from .tui import PodcastGeneratorApp
 
 
-def run_cli(topic_key: str, config_path: str | None = None) -> None:
+def run_cli(topic_key: str, config_path: str | None = None, stock_code: str | None = None) -> None:
     """Run generation pipeline via CLI (non-interactive)."""
     config = load_config(config_path)
     db = Database(config["database"]["path"])
@@ -20,6 +20,9 @@ def run_cli(topic_key: str, config_path: str | None = None) -> None:
 
     try:
         topic_name = get_topic_name(config, topic_key)
+        # For stock_talk, append stock code to display name
+        if topic_key == "stock_talk" and stock_code:
+            topic_name = f"{topic_name} - {stock_code}"
         print(f"🚀 开始生成: {topic_name}")
 
         # Create generation record
@@ -30,7 +33,8 @@ def run_cli(topic_key: str, config_path: str | None = None) -> None:
         print("📝 Step 1/4: 生成对话内容...")
         dialogue_gen = DialogueGenerator(config, db)
         dialogue, references, summary = dialogue_gen.generate(
-            generation.id, topic_key, topic_name, gen_output_dir
+            generation.id, topic_key, topic_name, gen_output_dir,
+            stock_code=stock_code
         )
         print(f"  ✓ 完成，共 {len(dialogue)} 句对话")
 
@@ -141,19 +145,15 @@ def resume_cli(gen_id: int, config_path: str | None = None) -> None:
         
         # Check DB images
         image_reqs = db.get_image_requests(gen.id)
-        # Simple check: are there enough successful images?
-        min_count = config.get("images", {}).get("min_count", 3)
+        # Use any successful images that exist on disk
         successful_images = [img for img in image_reqs if img.success and Path(img.image_path).exists()]
         
-        if gen.status in ["images_complete", "completed"] and len(successful_images) >= min_count:
-             print(f"🖼️ Step 3/4: 图片已生成 (跳过，共 {len(successful_images)} 张)")
-             image_paths = [img.image_path for img in successful_images]
+        # If we have any successful images, use them (don't regenerate due to rate limits)
+        if successful_images:
+            print(f"🖼️ Step 3/4: 使用已有图片 (共 {len(successful_images)} 张)")
+            image_paths = [img.image_path for img in successful_images]
         else:
-            if successful_images:
-                print(f"🖼️ Step 3/4: 图片生成不完整 (现有 {len(successful_images)} 张)，重新生成所有图片...")
-            else:
-                print("🖼️ Step 3/4: 生成图片...")
-            
+            print("🖼️ Step 3/4: 生成图片...")
             image_gen = ImageGenerator(config, db)
             image_paths = image_gen.generate(gen.id, dialogue, summary, gen_output_dir)
             print(f"  ✓ 完成，共 {len(image_paths)} 张图片")
@@ -332,10 +332,11 @@ Examples:
   uv run python -m src.main --show 5
 
 Available topics:
-  life_tips  - 生活常识 (Daily life knowledge)
-  health     - 健康保养 (Health & wellness)
-  history    - 历史野史 (Historical stories)
-  curiosity  - 猎奇故事 (Curiosity & mysteries)
+  life_tips   - 生活常识 (Daily life knowledge)
+  health      - 健康保养 (Health & wellness)
+  history     - 历史野史 (Historical stories)
+  curiosity   - 猎奇故事 (Curiosity & mysteries)
+  stock_talk  - 股票公司杂谈 (Stock company talk, requires --stock)
         """,
     )
 
@@ -343,8 +344,16 @@ Available topics:
         "--topic",
         "-t",
         type=str,
-        choices=["life_tips", "health", "history", "curiosity"],
+        choices=["life_tips", "health", "history", "curiosity", "stock_talk"],
         help="Topic to generate (runs in CLI mode)",
+    )
+
+    parser.add_argument(
+        "--stock",
+        "-S",
+        type=str,
+        metavar="CODE",
+        help="Stock code for stock_talk topic (e.g., AAPL, 600519, 00700.HK)",
     )
 
     parser.add_argument(
@@ -388,6 +397,10 @@ Available topics:
 
     args = parser.parse_args()
 
+    # Validate stock_talk requires --stock
+    if args.topic == "stock_talk" and not args.stock:
+        parser.error("--stock CODE is required when using --topic stock_talk")
+
     if args.history:
         show_history(args.config, args.limit)
     elif args.resume:
@@ -395,7 +408,7 @@ Available topics:
     elif args.show:
         show_session(args.show, args.config)
     elif args.topic:
-        run_cli(args.topic, args.config)
+        run_cli(args.topic, args.config, stock_code=args.stock)
     else:
         run_tui(args.config)
 

@@ -55,6 +55,43 @@ class DialogueGenerator:
 }}
 ```"""
 
+    STOCK_PROMPT_TEMPLATE = """你是一个专业的财经播客内容生成器。请根据股票代码「{stock_code}」生成一段关于该公司的双人对话脚本。
+
+## 任务
+首先，请识别股票代码对应的公司（支持全球市场：美股如AAPL、A股如600519、港股如00700.HK等）。
+然后围绕该公司生成以下三个方面的内容：
+
+### 必须涵盖的三大要点
+1. **公司主营业务**：公司做什么、主要产品/服务、商业模式
+2. **公司背景历史**：创始人、成立时间、发展历程中的重要里程碑
+3. **财务状况**：基于你所知的最新财务数据，简述营收、利润、增长趋势等关键指标
+
+## 要求
+1. **内容真实可查**：所有信息必须是真实的，观众可以在网上找到相关参考资料
+2. **对话时长**：总字数约{word_count}字，适合90秒的正常语速朗读
+3. **对话者**：{speakers_desc}
+4. **风格**：专业但通俗易懂，适合普通投资者收听
+5. **极简结构**：由于时间极短，**严禁**使用通用的开场白。必须**开门见山**，直接以公司最引人注目的特点或数据开始。
+6. **情感与音效控制**（ElevenLabs V3）：
+   请在对话中适当地使用以下标签来增强表现力（Tags必须使用英文方括号）：
+   - **情绪/语气**：`[curious]` (好奇), `[excited]` (兴奋), `[serious]` (严肃), `[surprised]` (惊讶)
+   - **节奏与强调**：使用省略号 `...` 表示停顿，`[firmly]` 表示强调
+7. **避免重复**：请避开以下最近已经讨论过的内容：
+{history}
+
+## 输出格式
+请严格按照以下JSON格式输出，不要包含任何其他文字：
+```json
+{{
+  "dialogue": [
+    {{"speaker": "角色名", "text": "对话内容"}},
+    {{"speaker": "角色名", "text": "对话内容"}}
+  ],
+  "references": ["参考来源1", "参考来源2"],
+  "summary": "一句话概括：公司名称 + 核心业务"
+}}
+```"""
+
     def __init__(self, config: dict[str, Any], db: Database):
         """
         Initialize the dialogue generator.
@@ -77,7 +114,12 @@ class DialogueGenerator:
         )
         self.model = "gemini-3-flash-preview"
 
-    def _build_prompt(self, topic_name: str, history: list[str]) -> str:
+    def _build_prompt(
+        self,
+        topic_name: str,
+        history: list[str],
+        stock_code: str | None = None,
+    ) -> str:
         """Build the prompt for dialogue generation."""
         speakers = self.config.get("dialogue", {}).get("speakers", [])
         speakers_desc = "、".join(
@@ -85,8 +127,16 @@ class DialogueGenerator:
         )
 
         word_count = self.config.get("dialogue", {}).get("target_word_count", 180)
-
         history_text = "\n".join(f"- {h}" for h in history) if history else "（无）"
+
+        # Use stock-specific prompt if stock_code is provided
+        if stock_code:
+            return self.STOCK_PROMPT_TEMPLATE.format(
+                stock_code=stock_code,
+                word_count=word_count,
+                speakers_desc=speakers_desc,
+                history=history_text,
+            )
 
         return self.PROMPT_TEMPLATE.format(
             topic=topic_name,
@@ -117,6 +167,7 @@ class DialogueGenerator:
         topic_key: str,
         topic_name: str,
         output_dir: Path,
+        stock_code: str | None = None,
     ) -> tuple[list[dict], list[str], str]:
         """
         Generate dialogue content for a topic.
@@ -126,6 +177,7 @@ class DialogueGenerator:
             topic_key: Topic key (e.g., 'life_tips').
             topic_name: Topic display name.
             output_dir: Directory to save output files.
+            stock_code: Optional stock code for stock_talk topic.
 
         Returns:
             Tuple of (dialogue list, references list, summary).
@@ -136,7 +188,7 @@ class DialogueGenerator:
 
         # Fetch recent history to avoid repetition
         history = self.db.get_topic_summary_history(topic_key, limit=5)
-        prompt = self._build_prompt(topic_name, history)
+        prompt = self._build_prompt(topic_name, history, stock_code=stock_code)
 
         # Create DB record
         req = self.db.create_dialogue_request(generation_id, prompt)

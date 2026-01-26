@@ -17,28 +17,35 @@ from ..database import Database
 class ImageGenerator:
     """Generate podcast images using Gemini AI with retry support."""
 
-    SCENE_PROMPT_TEMPLATE = """分析以下播客对话内容，你必须提取【恰好{count}个】最适合可视化的关键场景。
-这非常重要：你必须返回恰好 {count} 个场景，不能多也不能少！
+    SCENE_PROMPT_TEMPLATE = """You are an expert visual storyteller. Analyze the podcast dialogue below and extract【exactly {count}】key scenes that are most visually impactful.
+This is CRITICAL: You must return exactly {count} scenes.
 
-对话内容：
+Dialogue Context:
 {dialogue_text}
 
-对话主题：{summary}
+Topic Summary:
+{summary}
 
-请为每个场景生成一个详细的英文图片生成提示词（prompt），风格：{style}。
-要求：
-1. 必须返回恰好 {count} 个场景（JSON数组长度必须是 {count}）
-2. 每张图片的prompt应该具体描述场景中的人物、物体、环境
-3. 保持视觉风格一致，使用写实摄影风格（realistic photography）
-4. 如果场景涉及人物但未指定国籍，默认使用中国人（Chinese people）
-5. 场景应均匀分布在对话的不同部分
+Task:
+Generate a detailed English image prompt for {count} distinct scenes.
+For each scene, consider the cultural likely context (e.g., if talking about Chinese history, specify "ancient China style"; if modern tech, "futuristic modern lab"). DO NOT default to any specific ethnicity unless the context implies it.
 
-输出格式（JSON数组，必须有 {count} 个元素）：
+Requirements:
+1. Return a JSON array with exactly {count} objects.
+2. Prompts must be highly detailed, describing:
+   - Subject (who/what)
+   - Action (what is happening)
+   - Environment (lighting, background, weather)
+   - Mood/Atmosphere
+   - Photographic Style: {style}, cinematic lighting, 8k resolution, highly detailed
+3. Ensure visual variety across scenes.
+
+Output Format (JSON Array):
 ```json
 [
-  {{"scene": "场景1描述", "prompt": "English prompt for scene 1, realistic photography, Chinese people, 4K"}},
-  {{"scene": "场景2描述", "prompt": "English prompt for scene 2, realistic photography, Chinese people, 4K"}},
-  ... (共 {count} 个)
+  {{"scene": "Brief description of scene 1", "prompt": "Detailed English prompt for scene 1, including subject, action, lighting, style"}},
+  {{"scene": "Brief description of scene 2", "prompt": "Detailed English prompt for scene 2"}},
+  ...
 ]
 ```"""
 

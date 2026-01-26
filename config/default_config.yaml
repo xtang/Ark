@@ -6,6 +6,7 @@ topics:
   health: "健康保养"             # Health & wellness
   history: "历史野史"            # Historical stories
   curiosity: "猎奇故事"          # Curiosity & mysteries
+  stock_talk: "股票公司杂谈"      # Stock company talk (requires stock code)
 
 # Dialogue settings
 dialogue:

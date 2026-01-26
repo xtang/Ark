@@ -3,6 +3,7 @@
 import json
 import os
 import shutil
+import random
 import subprocess
 from pathlib import Path
 from typing import Any
@@ -36,6 +37,25 @@ class VideoGenerator:
         self.transition_duration = 0.5  # seconds for image transitions
         self.subtitle_margin = 20  # pixels from bottom (lower = closer to bottom)
         self.subtitle_font_size = config.get("output", {}).get("subtitle_font_size", 24)
+        
+        # Motion settings
+        self.enable_motion = config.get("video", {}).get("motion_effect", True)
+
+    def _get_background_music(self) -> str | None:
+        """Get a random background music file from assets."""
+        # Look in project/assets/music
+        # Assuming src/generators/video.py -> src/generators -> src -> project root
+        project_root = Path(__file__).parent.parent.parent
+        music_dir = project_root / "assets" / "music"
+        
+        if not music_dir.exists():
+            return None
+            
+        music_files = list(music_dir.glob("*.mp3")) + list(music_dir.glob("*.wav"))
+        if not music_files:
+            return None
+            
+        return str(random.choice(music_files))
 
     def _calculate_image_durations(
         self,
@@ -128,8 +148,9 @@ class VideoGenerator:
         output_path: str,
         subtitle_path: str | None = None,
         audio_duration: float = 0,
+        music_path: str | None = None,
     ) -> list[str]:
-        """Build FFmpeg command with animations, subtitles, and fade effects."""
+        """Build FFmpeg command with animations, subtitles, music and fade effects."""
         width, height = self.resolution.split("x")
         width_int, height_int = int(width), int(height)
 
@@ -140,17 +161,30 @@ class VideoGenerator:
         # Calculate total duration for fade out timing
         total_duration = sum(durations)
 
+
+        # Build video filter chain (Ken Burns or Scale)
         for i, (img_path, duration) in enumerate(zip(image_paths, durations)):
             # Add extra time for transitions
             input_duration = duration + self.transition_duration
             inputs.extend(["-loop", "1", "-t", str(input_duration), "-i", img_path])
 
-            # Simple scale and pad (no Ken Burns zoom - much faster)
-            filter_chain = (
-                f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
-                f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
-                f"setsar=1"
-            )
+            if self.enable_motion:
+                # Ken Burns effect: Zoom in 1.0 -> 1.15
+                # Using 24fps for cinematic feel and performance
+                # z='min(zoom+0.0015,1.5)' is too fast for 5s, let's use time-based
+                # ZOOM_SPEED = 0.0005 per frame roughly 1.0 -> 1.15 in 300 frames (12s)
+                # Ensure even numbers for scale to avoid libx264 errors
+                filter_chain = (
+                    f"[{i}:v]scale=1920:-2,zoompan=z='min(zoom+0.0005,1.15)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={self.resolution}:fps=24,"
+                    f"setsar=1"
+                )
+            else:
+                # Simple scale and pad
+                filter_chain = (
+                    f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                    f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"setsar=1"
+                )
 
             # Add crossfade for all except last image
             if i < len(image_paths) - 1:
@@ -158,17 +192,27 @@ class VideoGenerator:
 
             # Add fade in for first image (video start)
             if i == 0:
-                filter_chain = filter_chain.replace(
-                    "setsar=1",
-                    f"setsar=1,fade=t=in:st=0:d={self.fade_duration}"
-                )
+                # For zoompan, setsar is at the end, so we append fade
+                if self.enable_motion:
+                     filter_chain += f",fade=t=in:st=0:d={self.fade_duration}"
+                else:
+                    filter_chain = filter_chain.replace(
+                        "setsar=1",
+                        f"setsar=1,fade=t=in:st=0:d={self.fade_duration}"
+                    )
 
             filter_chain += f"[v{i}]"
             filter_parts.append(filter_chain)
 
-        # Add audio input
+        # Add audio input (Voice)
         inputs.extend(["-i", audio_path])
-        audio_input_idx = len(image_paths)
+        voice_input_idx = len(image_paths)
+        
+        # Add Music input if exists
+        music_input_idx = None
+        if music_path:
+            inputs.extend(["-i", music_path])
+            music_input_idx = voice_input_idx + 1
 
         # Concat all video streams with xfade transitions
         if len(image_paths) > 1:
@@ -208,13 +252,32 @@ class VideoGenerator:
         else:
             filter_parts.append("[vfaded]copy[outv]")
 
-        # Add audio fade in/out with 2s padding at end
-        audio_fade = (
-            f"[{audio_input_idx}:a]apad=pad_dur=2,"
+        # Audio mixing
+        # Voice: fade in/out
+        voice_filter = (
+            f"[{voice_input_idx}:a]apad=pad_dur=2,"
             f"afade=t=in:st=0:d={self.fade_duration},"
-            f"afade=t=out:st={audio_duration + 2.0 - self.fade_duration}:d={self.fade_duration}[outa]"
+            f"afade=t=out:st={audio_duration + 2.0 - self.fade_duration}:d={self.fade_duration}[voice_a]"
         )
-        filter_parts.append(audio_fade)
+        filter_parts.append(voice_filter)
+        
+        final_audio = "[voice_a]"
+        
+        if music_input_idx is not None:
+            # Music: loop, lower volume (15%), fade out
+            # aloop=loop=-1:size=2e+09 loops indefinitely
+            music_filter = (
+                f"[{music_input_idx}:a]aloop=loop=-1:size=2e+09,"
+                f"volume=0.15,"
+                f"afade=t=out:st={audio_duration + 2.0 - self.fade_duration}:d={self.fade_duration}[music_a]"
+            )
+            filter_parts.append(music_filter)
+            
+            # Mix voice and music
+            # duration=first means stop when voice stops (roughly) but we controlled duration via fade out
+            filter_parts.append(f"[voice_a][music_a]amix=inputs=2:duration=first:dropout_transition=2[outa]")
+        else:
+            filter_parts.append(f"[voice_a]acopy[outa]")
 
         filter_complex = ";".join(filter_parts)
 
@@ -227,7 +290,8 @@ class VideoGenerator:
             "-map", "[outv]",
             "-map", "[outa]",
             "-c:v", "libx264",
-            "-preset", "medium",
+            "-c:v", "libx264",
+            "-preset", "veryfast",
             "-crf", "23",
             "-c:a", "aac",
             "-b:a", "128k",
@@ -293,6 +357,11 @@ class VideoGenerator:
                     dialogue, voice_segments, output_dir
                 )
 
+            # Get background music
+            music_path = self._get_background_music()
+            if music_path:
+                print(f"🎵 Adding background music: {Path(music_path).name}")
+
             # Build and run FFmpeg command
             cmd = self._build_ffmpeg_command(
                 image_paths,
@@ -301,6 +370,7 @@ class VideoGenerator:
                 str(output_path),
                 subtitle_path,
                 audio_duration,
+                music_path,
             )
 
             # For debugging: save command

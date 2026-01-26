@@ -2,6 +2,8 @@
 
 from pathlib import Path
 from typing import Any
+import subprocess
+import platform
 
 from rich.text import Text
 from textual.app import App, ComposeResult
@@ -151,6 +153,7 @@ class SessionView(Container):
 
         with Container(id="session-actions"):
             yield Button("Retry Generation", id="btn-retry", disabled=True)
+            yield Button("Open Folder", id="btn-open-folder", disabled=True)
 
     def set_session(self, gen: Any) -> None:
         self.current_gen_id = gen.id
@@ -167,6 +170,7 @@ class SessionView(Container):
         # For now, just show basic info + allow retry if failed/incomplete
         # self.query_one("#btn-retry").disabled = (gen.status == "completed")
         self.query_one("#btn-retry").disabled = False # Always allow retry for now
+        self.query_one("#btn-open-folder").disabled = False
 
 
     def log(self, message: str) -> None:
@@ -244,6 +248,23 @@ class PodcastGeneratorApp(App):
                 # Or implement full resume logic. 
                 # Let's just log for now:
                 session_view.log("Resuming not fully implemented in TUI yet. Please use CLI --resume ID")
+        elif event.button.id == "btn-open-folder":
+            session_view = self.query_one(SessionView)
+            if session_view.current_gen_id:
+                gen_dir = Path(self.config["output"]["directory"]) / f"gen_{session_view.current_gen_id}"
+                if gen_dir.exists():
+                     try:
+                        if platform.system() == "Darwin":  # macOS
+                            subprocess.run(["open", str(gen_dir)])
+                        elif platform.system() == "Windows":
+                            subprocess.run(["explorer", str(gen_dir)])
+                        else:  # Linux
+                            subprocess.run(["xdg-open", str(gen_dir)])
+                        session_view.log(f"📂 Opened folder: {gen_dir}")
+                     except Exception as e:
+                        session_view.log(f"❌ Failed to open folder: {e}")
+                else:
+                    session_view.log(f"❌ Folder not found: {gen_dir}")
 
     def action_new_generation(self) -> None:
         if self.is_generating:

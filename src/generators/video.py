@@ -334,32 +334,36 @@ class VideoGenerator:
         else:
             filter_parts.append("[vfaded]copy[outv]")
 
+
         # Audio mixing
         # Voice: fade in/out
         voice_filter = (
             f"[{voice_input_idx}:a]apad=pad_dur=2,"
             f"afade=t=in:st=0:d={self.fade_duration},"
-            f"afade=t=out:st={audio_duration + 2.0 - self.fade_duration}:d={self.fade_duration}[voice_a]"
+            f"afade=t=out:st={audio_duration + 2.0 - 2.0}:d=2.0[voice_a]"
         )
         filter_parts.append(voice_filter)
         
         final_audio = "[voice_a]"
         
         if music_input_idx is not None:
-            # Music: loop, lower volume (15%), fade out
+            # Music: loop, lower volume (8%), fade out
             # aloop=loop=-1:size=2e+09 loops indefinitely
             music_filter = (
                 f"[{music_input_idx}:a]aloop=loop=-1:size=2e+09,"
-                f"volume=0.15,"
-                f"afade=t=out:st={audio_duration + 2.0 - self.fade_duration}:d={self.fade_duration}[music_a]"
+                f"volume=0.1,"
+                f"afade=t=out:st={audio_duration + 2.0 - 2.0}:d=2.0[music_a]"
             )
             filter_parts.append(music_filter)
             
             # Mix voice and music
             # duration=first means stop when voice stops (roughly) but we controlled duration via fade out
+            # dropout_transition=2 ensures smooth end
+            # weights=1:1 implies equal mix, but we already lowered music volume
             filter_parts.append(f"[voice_a][music_a]amix=inputs=2:duration=first:dropout_transition=2[outa]")
         else:
             filter_parts.append(f"[voice_a]acopy[outa]")
+
 
         filter_complex = ";".join(filter_parts)
 
@@ -384,6 +388,7 @@ class VideoGenerator:
 
         return cmd
 
+
     def generate(
         self,
         generation_id: int,
@@ -394,6 +399,7 @@ class VideoGenerator:
         output_dir: Path,
         dialogue: list[dict] | None = None,
         title: str | None = None,
+        cover_image_path: str | None = None,
     ) -> str:
         """
         Generate video from images and audio with animations and subtitles.
@@ -407,6 +413,8 @@ class VideoGenerator:
             output_dir: Directory to save output.
             dialogue: Optional dialogue for subtitles.
             title: Optional title for cover image.
+            cover_image_path: Optional path to dedicated AI-generated cover image.
+
 
         Returns:
             Path to generated video file.
@@ -418,17 +426,30 @@ class VideoGenerator:
         # Create DB record
         req = self.db.create_video_output(generation_id, "", 0, self.resolution, 0, False)
         
+
+
         try:
             # Generate cover image with title overlay
-            if image_paths and len(image_paths) > 0:
+            cover_source_image = None
+            if cover_image_path and os.path.exists(cover_image_path):
+                cover_source_image = cover_image_path
+                # AI generated cover already has text, so don't overlay title
+                title_overlay = None 
+            elif image_paths and len(image_paths) > 0:
+                cover_source_image = image_paths[0]
+                title_overlay = title
+
+            if cover_source_image:
                 cover_path = output_dir / "cover.jpg"
-                self._create_cover_with_title(image_paths[0], cover_path, title)
+                self._create_cover_with_title(cover_source_image, cover_path, title_overlay)
                 print(f"🖼️ Cover image saved to: {cover_path}")
+
 
             # Calculate durations
             durations = self._calculate_image_durations(
                 audio_duration, voice_segments, len(image_paths)
             )
+
 
             # Create subtitles if dialogue provided
             subtitle_path = None

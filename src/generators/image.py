@@ -49,6 +49,25 @@ Output Format (JSON Array):
 ]
 ```"""
 
+
+    COVER_PROMPT_TEMPLATE = """You are an expert graphical designer for podcast covers.
+Title: "{title}"
+Topic Summary: "{summary}"
+
+Task:
+Create a high-impact, minimalist, and professional podcast cover art prompt.
+
+Requirements:
+1. **Style**: {style}. Must look premium and eye-catching on small screens (like Spotify/Apple Podcasts).
+2. **Typography**: The image MUST include the title "{title}" integrated into the design. The text should be bold, legible, and artistic.
+3. **Composition**: Center-weighted or balanced. Text should be the focal point or seamlessly integrated with the imagery.
+4. **Elements**: Use symbolic or metaphorical imagery representing the topic. Avoid clutter.
+5. **Lighting**: Dramatic, studio quality, or soft natural light depending on the mood.
+
+Return ONLY the English image prompt descriptions.
+"""
+
+
     # Retry settings
     MAX_RETRIES = 3
     RETRY_DELAY_SECONDS = 2
@@ -141,12 +160,15 @@ Output Format (JSON Array):
 
         return json.loads(json_str)
 
+
     def _generate_image_with_retry(
         self,
         prompt: str,
         output_path: Path,
         req_id: int,
+        model_name: str | None = None,
     ) -> tuple[bool, str, int]:
+
         """
         Generate a single image with retry logic.
 
@@ -184,11 +206,13 @@ Output Format (JSON Array):
                     )
                 ]
 
+
                 response = self.client.models.generate_content(
-                    model=self.image_model,
+                    model=model_name or self.image_model,
                     contents=contents,
                     config=gen_config,
                 )
+
 
                 duration = time.time() - start_time
 
@@ -335,4 +359,83 @@ Output Format (JSON Array):
                 status="failed",
                 error_message=f"Image generation failed: {e}",
             )
+
             raise
+
+    def generate_cover(
+        self,
+        generation_id: int,
+        title: str,
+        summary: str,
+        output_dir: Path,
+    ) -> str | None:
+        """
+        Generate a dedicated cover image for the podcast.
+
+        Args:
+            generation_id: Database generation ID.
+            title: Podcast title.
+            summary: Podcast summary.
+            output_dir: Directory to save output.
+
+        Returns:
+            Path to generated cover image, or None if failed.
+        """
+        output_dir.mkdir(parents=True, exist_ok=True)
+        cover_path = output_dir / f"cover_{generation_id}_raw.png"
+        
+        try:
+            # Create Prompt
+            prompt_text = self.COVER_PROMPT_TEMPLATE.format(
+                title=title,
+                summary=summary,
+                style=self.style,
+            )
+
+            # Generate Prompt using Text Model first to refine it (Optional, but let's stick to direct prompt for now 
+            # or use the template as the prompt directly if it's descriptive enough. 
+            # Actually the template asks for a prompt *description*. Let's do a quick text generation step to get the actual image prompt.)
+            
+            # Step 1: Generate the image prompt description
+            gen_config = types.GenerateContentConfig(
+                temperature=0.7,
+                max_output_tokens=1024,
+            )
+            contents = [types.Content(role="user", parts=[types.Part.from_text(text=prompt_text)])]
+            
+            image_prompt = ""
+            for chunk in self.client.models.generate_content_stream(
+                model=self.text_model,
+                contents=contents,
+                config=gen_config,
+            ):
+                if chunk.text:
+                    image_prompt += chunk.text
+            
+            image_prompt = image_prompt.strip()
+            print(f"🎨 Cover Art Prompt: {image_prompt[:100]}...")
+
+            # Step 2: Generate the Image
+            # Create a dummy request ID for tracking? Or just pass 999
+            # Since we didn't add a database method for 'cover_request', we'll just log it.
+            
+
+            success, error_msg, _ = self._generate_image_with_retry(
+                image_prompt,
+                cover_path,
+                req_id=0, # 0 means not tracked individually in image_requests table for now
+                model_name="gemini-3-pro-image-preview",
+            )
+
+
+            if success:
+                print(f"✅ Cover art generated: {cover_path}")
+                return str(cover_path)
+            else:
+                print(f"❌ Cover art generation failed: {error_msg}")
+                return None
+
+        except Exception as e:
+            print(f"❌ Error generating cover: {e}")
+            return None
+

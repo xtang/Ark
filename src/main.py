@@ -47,11 +47,18 @@ def run_cli(topic_key: str, config_path: str | None = None, stock_code: str | No
         )
         print(f"  ✓ 完成，时长 {duration:.1f} 秒")
 
+
         # Step 3: Images
         print("🖼️ Step 3/4: 生成图片...")
         image_gen = ImageGenerator(config, db)
         image_paths = image_gen.generate(generation.id, dialogue, summary, gen_output_dir)
         print(f"  ✓ 完成，共 {len(image_paths)} 张图片")
+
+        # Generate dedicated cover
+        print("🎨 生成封面图...")
+        cover_path = image_gen.generate_cover(generation.id, title, summary, gen_output_dir)
+        if cover_path:
+            print(f"  ✓ 封面图已生成: {cover_path}")
 
         # Step 4: Video
         print("🎬 Step 4/4: 生成视频...")
@@ -59,8 +66,10 @@ def run_cli(topic_key: str, config_path: str | None = None, stock_code: str | No
         video_path = video_gen.generate(
             generation.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
             dialogue=dialogue,
-            title=title  # Pass title for cover generation
+            title=title,  # Pass title for cover generation
+            cover_image_path=cover_path
         )
+
         print(f"  ✓ 完成!")
 
         print(f"\n✅ 视频已生成: {video_path}")
@@ -157,6 +166,7 @@ def resume_cli(gen_id: int, config_path: str | None = None) -> None:
         successful_images = [img for img in image_reqs if img.success and Path(img.image_path).exists()]
         
         # If we have any successful images, use them (don't regenerate due to rate limits)
+
         if successful_images:
             print(f"🖼️ Step 3/4: 使用已有图片 (共 {len(successful_images)} 张)")
             image_paths = [img.image_path for img in successful_images]
@@ -165,6 +175,24 @@ def resume_cli(gen_id: int, config_path: str | None = None) -> None:
             image_gen = ImageGenerator(config, db)
             image_paths = image_gen.generate(gen.id, dialogue, summary, gen_output_dir)
             print(f"  ✓ 完成，共 {len(image_paths)} 张图片")
+
+        # Check for cover image
+        image_gen = ImageGenerator(config, db)
+        cover_path = None
+        # Try to find existing cover
+        potential_cover = gen_output_dir / f"cover_{gen.id}_raw.png"
+        if potential_cover.exists():
+            print(f"  ✓ 使用已有封面: {potential_cover}")
+            cover_path = str(potential_cover)
+        else:
+            print("🎨 生成封面图...")
+            # We need title, if not loaded, try from summary or default
+            if not title and summary:
+                title = summary[:20]
+            elif not title:
+                title = "Podcast"
+                
+            cover_path = image_gen.generate_cover(gen.id, title, summary, gen_output_dir)
 
         # --- Step 4: Video ---
         video_out = db.get_video_output(gen.id)
@@ -179,8 +207,10 @@ def resume_cli(gen_id: int, config_path: str | None = None) -> None:
             video_path = video_gen.generate(
                 gen.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
                 dialogue=dialogue,
-                title=title
+                title=title,
+                cover_image_path=cover_path
             )
+
             print(f"  ✓ 完成!")
 
         print(f"\n✅ 视频已恢复/生成: {video_path}")

@@ -201,12 +201,13 @@ class PodcastGeneratorApp(App):
             self.call_from_thread(self._log, "📝 正在调用 Gemini AI 生成对话...")
 
             dialogue_gen = DialogueGenerator(self.config, self.db)
-            dialogue, references, summary = dialogue_gen.generate(
+            dialogue, references, summary, title = dialogue_gen.generate(
                 generation.id, topic_key, topic_name, gen_output_dir
             )
 
             self.call_from_thread(self._log, f"✓ 对话生成完成，共 {len(dialogue)} 句")
             self.call_from_thread(self._log, f"  主题: {summary}")
+            self.call_from_thread(self._log, f"  标题: {title}")
 
             # Step 2: Generate audio
             self.call_from_thread(self._update_status, "🔊 Step 2/4: 生成语音...")
@@ -242,7 +243,8 @@ class PodcastGeneratorApp(App):
                 duration,
                 voice_segments,
                 gen_output_dir,
-                dialogue=dialogue,  # Pass dialogue for subtitles
+                dialogue=dialogue,
+                title=title,  # Pass title for cover generation
             )
 
             # Success!

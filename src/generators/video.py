@@ -41,6 +41,96 @@ class VideoGenerator:
         # Motion settings
         self.enable_motion = config.get("video", {}).get("motion_effect", True)
 
+    def _create_cover_with_title(
+        self,
+        source_image: str,
+        output_path: Path,
+        title: str | None = None,
+    ) -> None:
+        """
+        Create a cover image with title text overlay.
+
+        Args:
+            source_image: Path to source image.
+            output_path: Path to save the cover.
+            title: Title text to overlay (optional).
+        """
+        try:
+            from PIL import Image, ImageDraw, ImageFont, ImageFilter
+        except ImportError:
+            # Fallback to simple copy if Pillow not available
+            import shutil
+            shutil.copy(source_image, output_path)
+            return
+
+        # Open source image
+        img = Image.open(source_image).convert("RGBA")
+        
+        if not title:
+            # No title, just save the image
+            img.convert("RGB").save(output_path, "JPEG", quality=95)
+            return
+
+        width, height = img.size
+
+        # Create gradient overlay for text readability (bottom to middle)
+        overlay = Image.new("RGBA", (width, height), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(overlay)
+        
+        # Draw gradient from bottom (dark) to middle (transparent)
+        gradient_height = height // 2
+        for y in range(gradient_height):
+            # Opacity: 200 at bottom, 0 at middle
+            alpha = int(200 * (1 - y / gradient_height))
+            draw.rectangle(
+                [(0, height - gradient_height + y), (width, height - gradient_height + y + 1)],
+                fill=(0, 0, 0, alpha)
+            )
+
+        # Composite the gradient overlay
+        img = Image.alpha_composite(img, overlay)
+
+        # Load font - try system Chinese font
+        font_size = max(48, width // 15)  # Dynamic font size based on image width
+        font = None
+        font_paths = [
+            "/System/Library/Fonts/PingFang.ttc",  # macOS
+            "/System/Library/Fonts/STHeiti Light.ttc",
+            "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",  # Linux
+            "C:\\Windows\\Fonts\\msyh.ttc",  # Windows
+        ]
+        for font_path in font_paths:
+            if Path(font_path).exists():
+                try:
+                    font = ImageFont.truetype(font_path, font_size)
+                    break
+                except Exception:
+                    continue
+        
+        if font is None:
+            font = ImageFont.load_default()
+
+        # Draw title text
+        draw = ImageDraw.Draw(img)
+        
+        # Calculate text position (centered, in bottom third)
+        bbox = draw.textbbox((0, 0), title, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+        
+        x = (width - text_width) // 2
+        y = height - height // 4 - text_height // 2  # Position in bottom quarter
+
+        # Draw text shadow
+        shadow_offset = 3
+        draw.text((x + shadow_offset, y + shadow_offset), title, font=font, fill=(0, 0, 0, 200))
+        
+        # Draw main text
+        draw.text((x, y), title, font=font, fill=(255, 255, 255, 255))
+
+        # Save as JPEG
+        img.convert("RGB").save(output_path, "JPEG", quality=95)
+
     def _get_background_music(self) -> str | None:
         """Get a random background music file from assets."""
         # Look in project/assets/music
@@ -303,6 +393,7 @@ class VideoGenerator:
         voice_segments: list[dict],
         output_dir: Path,
         dialogue: list[dict] | None = None,
+        title: str | None = None,
     ) -> str:
         """
         Generate video from images and audio with animations and subtitles.
@@ -315,6 +406,7 @@ class VideoGenerator:
             voice_segments: Voice segment timing data.
             output_dir: Directory to save output.
             dialogue: Optional dialogue for subtitles.
+            title: Optional title for cover image.
 
         Returns:
             Path to generated video file.
@@ -327,15 +419,11 @@ class VideoGenerator:
         req = self.db.create_video_output(generation_id, "", 0, self.resolution, 0, False)
         
         try:
-            # Set cover image (save first image as cover.jpg)
+            # Generate cover image with title overlay
             if image_paths and len(image_paths) > 0:
                 cover_path = output_dir / "cover.jpg"
-                try:
-                    import shutil
-                    shutil.copy(image_paths[0], cover_path)
-                    print(f"🖼️ Cover image saved to: {cover_path}")
-                except Exception as e:
-                    print(f"⚠️ Failed to create cover image: {e}")
+                self._create_cover_with_title(image_paths[0], cover_path, title)
+                print(f"🖼️ Cover image saved to: {cover_path}")
 
             # Calculate durations
             durations = self._calculate_image_durations(

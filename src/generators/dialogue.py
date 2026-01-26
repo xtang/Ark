@@ -98,7 +98,7 @@ class DialogueGenerator:
         topic_name: str,
         output_dir: Path,
         stock_code: str | None = None,
-    ) -> tuple[list[dict], list[str], str]:
+    ) -> tuple[list[dict], list[str], str, str]:
         """
         Generate dialogue content for a topic.
 
@@ -110,7 +110,7 @@ class DialogueGenerator:
             stock_code: Optional stock code for stock_talk topic.
 
         Returns:
-            Tuple of (dialogue list, references list, summary).
+            Tuple of (dialogue list, references list, summary, title).
 
         Raises:
             Exception: If generation fails.
@@ -160,6 +160,7 @@ class DialogueGenerator:
             dialogue = data.get("dialogue", [])
             references = data.get("references", [])
             summary = data.get("summary", "")
+            title = data.get("title", summary[:12] if summary else "")  # Fallback to summary prefix
 
             # Validate dialogue structure
             for i, line in enumerate(dialogue):
@@ -188,7 +189,7 @@ class DialogueGenerator:
                 dialogue_json_path=str(dialogue_path),
             )
 
-            return dialogue, references, summary
+            return dialogue, references, summary, title
 
         except Exception as e:
             self.db.update_dialogue_request(

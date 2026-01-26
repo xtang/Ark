@@ -32,11 +32,12 @@ def run_cli(topic_key: str, config_path: str | None = None, stock_code: str | No
         # Step 1: Dialogue
         print("📝 Step 1/4: 生成对话内容...")
         dialogue_gen = DialogueGenerator(config, db)
-        dialogue, references, summary = dialogue_gen.generate(
+        dialogue, references, summary, title = dialogue_gen.generate(
             generation.id, topic_key, topic_name, gen_output_dir,
             stock_code=stock_code
         )
         print(f"  ✓ 完成，共 {len(dialogue)} 句对话")
+        print(f"  📌 标题: {title}")
 
         # Step 2: Audio
         print("🔊 Step 2/4: 生成语音...")
@@ -57,7 +58,8 @@ def run_cli(topic_key: str, config_path: str | None = None, stock_code: str | No
         video_gen = VideoGenerator(config, db)
         video_path = video_gen.generate(
             generation.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
-            dialogue=dialogue  # Pass dialogue for subtitles
+            dialogue=dialogue,
+            title=title  # Pass title for cover generation
         )
         print(f"  ✓ 完成!")
 
@@ -112,10 +114,16 @@ def resume_cli(gen_id: int, config_path: str | None = None) -> None:
             dialogue = dialogue_req.get_dialogue()
             references = dialogue_req.get_references()
             summary = dialogue_req.summary
+            # Try to get title from saved JSON
+            title = ""
+            if gen.dialogue_json_path and Path(gen.dialogue_json_path).exists():
+                with open(gen.dialogue_json_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    title = data.get("title", summary[:12] if summary else "")
         else:
             print("📝 Step 1/4: 重新生成对话内容...")
             dialogue_gen = DialogueGenerator(config, db)
-            dialogue, references, summary = dialogue_gen.generate(
+            dialogue, references, summary, title = dialogue_gen.generate(
                 gen.id, gen.topic_key, gen.topic_name, gen_output_dir
             )
             print(f"  ✓ 完成，共 {len(dialogue)} 句对话")
@@ -170,7 +178,8 @@ def resume_cli(gen_id: int, config_path: str | None = None) -> None:
             video_gen = VideoGenerator(config, db)
             video_path = video_gen.generate(
                 gen.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
-                dialogue=dialogue
+                dialogue=dialogue,
+                title=title
             )
             print(f"  ✓ 完成!")
 

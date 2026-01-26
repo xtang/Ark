@@ -42,6 +42,11 @@ class DialogueGenerator:
         )
         self.model = "gemini-3-flash-preview"
 
+        # Initialize Grounding Tool
+        self.grounding_tool = types.Tool(
+            google_search=types.GoogleSearch()
+        )
+
     def _build_prompt(
         self,
         topic_name: str,
@@ -125,10 +130,17 @@ class DialogueGenerator:
 
         try:
             # Configure generation
+            tools = []
+            model_name = self.model
+            if stock_code or topic_key == "stock_talk":
+                tools = [self.grounding_tool]
+                model_name = "gemini-3-pro-preview"
+
             gen_config = types.GenerateContentConfig(
                 temperature=0.8,
                 top_p=0.95,
                 max_output_tokens=4096,
+                tools=tools,
                 safety_settings=[
                     types.SafetySetting(category="HARM_CATEGORY_HATE_SPEECH", threshold="OFF"),
                     types.SafetySetting(category="HARM_CATEGORY_DANGEROUS_CONTENT", threshold="OFF"),
@@ -147,13 +159,33 @@ class DialogueGenerator:
 
             # Generate
             response_text = ""
-            for chunk in self.client.models.generate_content_stream(
-                model=self.model,
-                contents=contents,
-                config=gen_config,
-            ):
-                if chunk.text:
-                    response_text += chunk.text
+            grounding_chunks = []
+
+            if tools:
+                # Use non-streaming for tools to easily access grounding metadata
+                response = self.client.models.generate_content(
+                    model=model_name,
+                    contents=contents,
+                    config=gen_config,
+                )
+                if response.text:
+                    response_text = response.text
+
+                # Extract grounding metadata
+                if response.candidates and response.candidates[0].grounding_metadata:
+                    metadata = response.candidates[0].grounding_metadata
+                    if metadata.grounding_chunks:
+                        grounding_chunks = metadata.grounding_chunks
+
+            else:
+                # Use streaming for normal chat
+                for chunk in self.client.models.generate_content_stream(
+                    model=model_name,
+                    contents=contents,
+                    config=gen_config,
+                ):
+                    if chunk.text:
+                        response_text += chunk.text
 
             # Parse response
             data = self._extract_json(response_text)
@@ -161,6 +193,12 @@ class DialogueGenerator:
             references = data.get("references", [])
             summary = data.get("summary", "")
             title = data.get("title", summary[:12] if summary else "")  # Fallback to summary prefix
+
+            # Append grounding references
+            for chunk in grounding_chunks:
+                if chunk.web and chunk.web.uri:
+                     title_text = chunk.web.title or "Web Source"
+                     references.append(f"[{title_text}]({chunk.web.uri})")
 
             # Validate dialogue structure
             for i, line in enumerate(dialogue):

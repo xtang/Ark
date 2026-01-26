@@ -1,6 +1,6 @@
 # AI Podcast Generator
 
-Save our parents' attention (fight against the content on the internet).
+Reclaim Our Parents' Attention
 
 ## Quick Start
 

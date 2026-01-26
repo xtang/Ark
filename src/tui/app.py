@@ -330,7 +330,7 @@ class PodcastGeneratorApp(App):
             log("🎨 Generating Cover Art...")
             cover_path = image_gen.generate_cover(generation.id, title, summary, gen_output_dir, language=language)
             if cover_path:
-                log(f"✓ Cover art generated")
+                log(f"✓ Cover art generated")  
             
             log(f"✓ Images complete: {len(image_paths)}")
 

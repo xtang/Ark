@@ -45,6 +45,7 @@ class ImageGenerator:
         )
         self.text_model = "gemini-3-flash-preview"
         self.image_model = "gemini-2.5-flash-image"
+        self.image_cover_model = "gemini-3-pro-image-preview"
 
         # Dynamic image count settings
         self.count_per_lines = config.get("images", {}).get("count_per_lines", 2)
@@ -399,7 +400,7 @@ class ImageGenerator:
                 image_prompt,
                 cover_path,
                 req_id=0, # 0 means not tracked individually in image_requests table for now
-                model_name="gemini-3-pro-image-preview",
+                model_name=self.image_cover_model,
             )
 
 

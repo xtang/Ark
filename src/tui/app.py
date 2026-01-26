@@ -18,6 +18,7 @@ from textual.widgets import (
     ContentSwitcher,
     RadioSet,
     RadioButton,
+    Input,
 )
 from textual.screen import ModalScreen
 from textual.binding import Binding
@@ -54,7 +55,11 @@ class NewGenerationModal(ModalScreen[dict]):
                 yield RadioButton("English", id="lang-EN")
                 yield RadioButton("日本語 (Japanese)", id="lang-JP")
             
-            yield Label("Select Topic / 选择主题", classes="modal-section-title")
+            yield Label("Custom Topic / 自定义主题", classes="modal-section-title")
+            yield Input(placeholder="Enter custom topic... / 输入自定义主题", id="custom-topic-input")
+            yield Button("Start Custom / 开始自定义", id="btn-start-custom", variant="success", disabled=True)
+            
+            yield Label("Preset Topics / 预设主题", classes="modal-section-title")
             with Vertical():
                 for key, name in self.topics.items():
                     yield Button(f"{name}", id=f"topic-{key}", classes="topic-button", variant="primary")
@@ -68,9 +73,29 @@ class NewGenerationModal(ModalScreen[dict]):
         else:
             self.selected_language = "CN"
 
+    def on_input_changed(self, event: Input.Changed) -> None:
+        # Enable start button only if input is not empty
+        self.query_one("#btn-start-custom", Button).disabled = not event.value.strip()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.value.strip():
+            self.dismiss({
+                "topic": "custom",
+                "custom_topic_name": event.value.strip(),
+                "language": self.selected_language
+            })
+
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "cancel":
             self.dismiss(None)
+        elif event.button.id == "btn-start-custom":
+            custom_topic = self.query_one("#custom-topic-input", Input).value.strip()
+            if custom_topic:
+                 self.dismiss({
+                    "topic": "custom",
+                    "custom_topic_name": custom_topic,
+                    "language": self.selected_language
+                })
         elif event.button.id and event.button.id.startswith("topic-"):
             topic_key = event.button.id.replace("topic-", "")
             self.dismiss({"topic": topic_key, "language": self.selected_language})
@@ -227,14 +252,23 @@ class PodcastGeneratorApp(App):
             
         def handle_topic(result: dict | None) -> None:
             if result and result.get("topic"):
-                self._start_generation(result["topic"], result.get("language", "CN"))
+                self._start_generation(
+                    result["topic"], 
+                    result.get("language", "CN"),
+                    custom_topic_name=result.get("custom_topic_name")
+                )
 
         self.push_screen(NewGenerationModal(self.config.get("topics", {})), handle_topic)
 
     @work(thread=True)
-    def _start_generation(self, topic_key: str, language: str = "CN") -> None:
+    def _start_generation(self, topic_key: str, language: str = "CN", custom_topic_name: str | None = None) -> None:
         self.is_generating = True
-        topic_name = get_topic_name(self.config, topic_key)
+        
+        if topic_key == "custom" and custom_topic_name:
+            topic_name = custom_topic_name
+        else:
+            topic_name = get_topic_name(self.config, topic_key)
+            
         output_dir = Path(self.config["output"]["directory"])
         
         # Initialize thread-local DB connection

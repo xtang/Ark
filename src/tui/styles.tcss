@@ -221,6 +221,23 @@ RadioButton.-on {
     text-style: bold;
 }
 
+Input {
+    background: transparent;
+    border: solid $muted;
+    color: $fg;
+    height: 3;
+    margin-bottom: 2;
+}
+
+Input:focus {
+    border: solid $accent;
+    color: $accent;
+}
+
+Input > .input--placeholder {
+    color: $muted;
+}
+
 .topic-button {
     width: 100%;
     margin-bottom: 1;

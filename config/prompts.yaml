@@ -50,12 +50,8 @@ default: |
 stock_talk: |
   你是一个专业的财经播客内容生成器。请根据股票代码「{stock_code}」生成一段关于该公司的双人对话脚本。
   
-  {language_instructions:
-  CN: "请全程使用中文进行对话。"
-  EN: "Please generate the dialogue entirely in English."
-  JP: "Please generate the dialogue entirely in Japanese."
-  }
-  ## 任务
+  {language_instruction}
+
   首先，请使用 Google Search 工具查找该公司的最新信息。
   请识别股票代码对应的公司（支持全球市场：美股如AAPL、A股如600519、港股如00700.HK等）。
   然后围绕该公司生成以下三个方面的内容：
@@ -95,3 +91,9 @@ stock_talk: |
     "summary": "一句话概括：公司名称 + 核心亮点"
   }}
   ```
+
+# Language Instructions
+language_instructions:
+  CN: "请全程使用中文进行对话。"
+  EN: "Please generate the dialogue entirely in English."
+  JP: "Please generate the dialogue entirely in Japanese."

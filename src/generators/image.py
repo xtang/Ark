@@ -12,61 +12,11 @@ from google.genai import types
 from dotenv import load_dotenv
 
 from ..database import Database
+from ..config import load_prompts
 
 
 class ImageGenerator:
     """Generate podcast images using Gemini AI with retry support."""
-
-    SCENE_PROMPT_TEMPLATE = """You are an expert visual storyteller. Analyze the podcast dialogue below and extract【exactly {count}】key scenes that are most visually impactful.
-This is CRITICAL: You must return exactly {count} scenes.
-
-Dialogue Context:
-{dialogue_text}
-
-Topic Summary:
-{summary}
-
-Task:
-Generate a detailed English image prompt for {count} distinct scenes.
-For each scene, consider the cultural likely context (e.g., if talking about Chinese history, specify "ancient China style"; if modern tech, "futuristic modern lab"). DO NOT default to any specific ethnicity unless the context implies it.
-
-Requirements:
-1. Return a JSON array with exactly {count} objects.
-2. Prompts must be highly detailed, describing:
-   - Subject (who/what)
-   - Action (what is happening)
-   - Environment (lighting, background, weather)
-   - Mood/Atmosphere
-   - Photographic Style: {style}, cinematic lighting, 8k resolution, highly detailed
-3. Ensure visual variety across scenes.
-
-Output Format (JSON Array):
-```json
-[
-  {{"scene": "Brief description of scene 1", "prompt": "Detailed English prompt for scene 1, including subject, action, lighting, style"}},
-  {{"scene": "Brief description of scene 2", "prompt": "Detailed English prompt for scene 2"}},
-  ...
-]
-```"""
-
-
-    COVER_PROMPT_TEMPLATE = """You are an expert graphical designer for podcast covers.
-Title: "{title}"
-Topic Summary: "{summary}"
-
-Task:
-Create a high-impact, minimalist, and professional podcast cover art prompt.
-
-Requirements:
-1. **Style**: {style}. Must look premium and eye-catching on small screens (like Spotify/Apple Podcasts).
-2. **Typography**: The image MUST include the title "{title}" integrated into the design. The text should be bold, legible, and artistic.
-3. **Composition**: Center-weighted or balanced. Text should be the focal point or seamlessly integrated with the imagery.
-4. **Elements**: Use symbolic or metaphorical imagery representing the topic. Avoid clutter.
-5. **Lighting**: Dramatic, studio quality, or soft natural light depending on the mood.
-
-Return ONLY the English image prompt descriptions.
-"""
-
 
     # Retry settings
     MAX_RETRIES = 3
@@ -82,6 +32,7 @@ Return ONLY the English image prompt descriptions.
         """
         self.config = config
         self.db = db
+        self.prompts = load_prompts()
 
         load_dotenv()
         api_key = os.environ.get("GOOGLE_CLOUD_API_KEY")
@@ -100,7 +51,19 @@ Return ONLY the English image prompt descriptions.
         self.min_count = config.get("images", {}).get("min_count", 3)
         self.max_count = config.get("images", {}).get("max_count", 10)
         self.aspect_ratio = config.get("images", {}).get("aspect_ratio", "16:9")
-        self.style = config.get("images", {}).get("style", "realistic illustration")
+        # Default style from config, can be overridden by language specific style
+        self.default_style = config.get("images", {}).get("style", "realistic illustration")
+
+    def _get_culture_context(self, language: str) -> tuple[str, str]:
+        """Get culture context and image style for the given language."""
+        languages_config = self.prompts.get("languages", {})
+        lang_config = languages_config.get(language, {})
+        
+        culture = lang_config.get("culture", "Target Audience: Global.")
+        # specific style overrides default if present
+        style = lang_config.get("image_style", self.default_style)
+        
+        return culture, style
 
     def _calculate_image_count(self, dialogue_length: int) -> int:
         """Calculate optimal number of images based on dialogue length."""
@@ -109,7 +72,7 @@ Return ONLY the English image prompt descriptions.
         # Clamp to min/max
         return max(self.min_count, min(self.max_count, count))
 
-    def _extract_scenes(self, dialogue: list[dict], summary: str, image_count: int) -> list[dict]:
+    def _extract_scenes(self, dialogue: list[dict], summary: str, image_count: int, language: str = "CN") -> list[dict]:
         """Extract key scenes from dialogue for image generation."""
         import json
         import re
@@ -119,11 +82,15 @@ Return ONLY the English image prompt descriptions.
             f"{line['speaker']}: {line['text']}" for line in dialogue
         )
 
-        prompt = self.SCENE_PROMPT_TEMPLATE.format(
+        culture_context, style = self._get_culture_context(language)
+        template = self.prompts.get("image_scene_extraction", "")
+        
+        prompt = template.format(
             count=image_count,
             dialogue_text=dialogue_text,
             summary=summary,
-            style=self.style,
+            style=style,
+            culture_context=culture_context
         )
 
         gen_config = types.GenerateContentConfig(
@@ -287,6 +254,7 @@ Return ONLY the English image prompt descriptions.
         dialogue: list[dict],
         summary: str,
         output_dir: Path,
+        language: str = "CN",
     ) -> list[str]:
         """
         Generate images for dialogue content.
@@ -296,6 +264,7 @@ Return ONLY the English image prompt descriptions.
             dialogue: List of dialogue lines.
             summary: Dialogue summary.
             output_dir: Directory to save output files.
+            language: Language code.
 
         Returns:
             List of generated image paths.
@@ -312,7 +281,7 @@ Return ONLY the English image prompt descriptions.
             image_count = self._calculate_image_count(len(dialogue))
 
             # Extract scenes
-            scenes = self._extract_scenes(dialogue, summary, image_count)
+            scenes = self._extract_scenes(dialogue, summary, image_count, language=language)
 
             # Generate each image with retry
             for i, scene in enumerate(scenes[:image_count]):
@@ -368,6 +337,7 @@ Return ONLY the English image prompt descriptions.
         title: str,
         summary: str,
         output_dir: Path,
+        language: str = "CN",
     ) -> str | None:
         """
         Generate a dedicated cover image for the podcast.
@@ -377,6 +347,7 @@ Return ONLY the English image prompt descriptions.
             title: Podcast title.
             summary: Podcast summary.
             output_dir: Directory to save output.
+            language: Language code.
 
         Returns:
             Path to generated cover image, or None if failed.
@@ -385,11 +356,15 @@ Return ONLY the English image prompt descriptions.
         cover_path = output_dir / f"cover_{generation_id}_raw.png"
         
         try:
+            culture_context, style = self._get_culture_context(language)
+            template = self.prompts.get("image_cover_generation", "")
+
             # Create Prompt
-            prompt_text = self.COVER_PROMPT_TEMPLATE.format(
+            prompt_text = template.format(
                 title=title,
                 summary=summary,
-                style=self.style,
+                style=style,
+                culture_context=culture_context
             )
 
             # Generate Prompt using Text Model first to refine it (Optional, but let's stick to direct prompt for now 

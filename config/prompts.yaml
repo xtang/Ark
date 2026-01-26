@@ -4,7 +4,8 @@
 
 # Default prompt for general topics (life_tips, health, history, curiosity)
 default: |
-  你是一个专业的播客内容生成器。请生成一段关于「{topic}」的双人对话脚本。
+  {culture_instruction}
+  请生成一段关于「{topic}」的双人对话脚本。
   
   {language_instruction}
 
@@ -24,7 +25,7 @@ default: |
      - **音效**: `[clears throat]` (清嗓子), `[breathing]` (呼吸声), `[applause]` (掌声)
      - **节奏与强调**：
        - 使用省略号 `...` 表示停顿。
-       - **中文强调**：由于中文无法大写，请使用标点符号 `！` 或配合语气标签如 `[firmly]` (坚定地), `[loudly]` (大声地) 来表达重读。
+       - **强调**：请使用标点符号 `！` 或配合语气标签如 `[firmly]` (坚定地), `[loudly]` (大声地) 来表达重读。
      - **示例**：
        - `[laughs] 这太好笑了！`
        - `[confused] 等等... 你确信吗？`
@@ -48,7 +49,8 @@ default: |
 
 # Stock talk prompt template
 stock_talk: |
-  你是一个专业的财经播客内容生成器。请根据股票代码「{stock_code}」生成一段关于该公司的双人对话脚本。
+  {culture_instruction}
+  请根据股票代码「{stock_code}」生成一段关于该公司的双人对话脚本。
   
   {language_instruction}
 
@@ -92,8 +94,73 @@ stock_talk: |
   }}
   ```
 
-# Language Instructions
-language_instructions:
-  CN: "请全程使用中文进行对话。"
-  EN: "Please generate the dialogue entirely in English."
-  JP: "Please generate the dialogue entirely in Japanese."
+# Image Scene Extraction Template
+image_scene_extraction: |
+  You are an expert visual storyteller. Analyze the podcast dialogue below and extract 【exactly {count}】 key scenes that are most visually impactful.
+  This is CRITICAL: You must return exactly {count} scenes.
+
+  Dialogue Context:
+  {dialogue_text}
+
+  Topic Summary:
+  {summary}
+
+  Task:
+  Generate a detailed English image prompt for {count} distinct scenes.
+  For each scene, consider the cultural context: {culture_context}.
+  Make sure the characters and settings reflect this culture unless the dialogue explicitly contradicts it.
+
+  Requirements:
+  1. Return a JSON array with exactly {count} objects.
+  2. Prompts must be highly detailed, describing:
+     - Subject (who/what)
+     - Action (what is happening)
+     - Environment (lighting, background, weather)
+     - Mood/Atmosphere
+     - Photographic Style: {style}, cinematic lighting, 8k resolution, highly detailed
+  3. Ensure visual variety across scenes.
+
+  Output Format (JSON Array):
+  ```json
+  [
+    {{"scene": "Brief description of scene 1", "prompt": "Detailed English prompt for scene 1..."}},
+    {{"scene": "Brief description of scene 2", "prompt": "Detailed English prompt for scene 2..."}}
+  ]
+  ```
+
+# Image Cover Generation Template
+image_cover_generation: |
+  You are an expert graphical designer for podcast covers.
+  Title: "{title}"
+  Topic Summary: "{summary}"
+
+  Task:
+  Create a high-impact, minimalist, and professional podcast cover art prompt.
+  
+  Context:
+  Target Audience: {culture_context}
+  
+  Requirements:
+  1. **Style**: {style}. Must look premium and eye-catching on small screens.
+  2. **Typography**: The image MUST include the title "{title}" integrated into the design. The text should be bold, legible, and artistic.
+  3. **Composition**: Center-weighted or balanced.
+  4. **Elements**: Use symbolic or metaphorical imagery representing the topic.
+  5. **Lighting**: Dramatic, studio quality, or soft natural light depending on the mood.
+
+  Return ONLY the English image prompt descriptions.
+
+# Language Instructions and Cultural Contexts
+languages:
+  CN:
+    instruction: "请全程使用中文进行对话。"
+    culture: "Target Audience: Chinese. Cultural Context: Modern China, Asian aesthetic. Characters should primarily be East Asian."
+    image_style: "realistic photography, natural lighting, high quality, 4K"
+  EN:
+    instruction: "Please generate the dialogue entirely in English."
+    culture: "Target Audience: Global/Western. Cultural Context: Modern Western society. diverse characters."
+    image_style: "cinematic photography, hollywood style, high contrast, 4K"
+  JP:
+    instruction: "Please generate the dialogue entirely in Japanese."
+    culture: "Target Audience: Japanese. Cultural Context: Modern Japan, clean aesthetic. Characters should primarily be Japanese."
+    image_style: "clean photography, soft lighting, japanese aesthetic, 4K"
+

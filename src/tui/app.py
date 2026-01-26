@@ -324,7 +324,7 @@ class PodcastGeneratorApp(App):
             # Step 3
             log("🖼️ Step 3/4: Image Generation...")
             image_gen = ImageGenerator(self.config, db)
-            image_paths = image_gen.generate(generation.id, dialogue, summary, gen_output_dir)
+            image_paths = image_gen.generate(generation.id, dialogue, summary, gen_output_dir, language=language)
             log(f"✓ Images complete: {len(image_paths)}")
 
             # Step 4

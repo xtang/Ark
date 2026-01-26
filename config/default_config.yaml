@@ -27,7 +27,7 @@ images:
   min_count: 3                    # Minimum images
   max_count: 10                   # Maximum images
   aspect_ratio: "9:16"            # Video format (vertical for mobile)
-  style: "realistic photography, natural lighting, Chinese people, high quality, 4K"
+  style: "realistic photography, natural lighting, high quality, 4K"
 
 # Output settings
 output:
@@ -39,7 +39,7 @@ output:
 
 # Audio processing settings
 audio:
-  speed_ratio: 1.15              # Speed up factor (e.g. 1.25x faster)
+  speed_ratio: 1.05              # Speed up factor (e.g. 1.25x faster)
 
 # Database settings
 database:

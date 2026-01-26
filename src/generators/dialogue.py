@@ -63,9 +63,13 @@ class DialogueGenerator:
         word_count = self.config.get("dialogue", {}).get("target_word_count", 180)
         history_text = "\n".join(f"- {h}" for h in history) if history else "（无）"
         
-        # Get language instruction
-        lang_instructions = self.prompts.get("language_instructions", {})
-        lang_instr = lang_instructions.get(language, "请全程使用中文进行对话。")
+        # Get language and culture instruction
+        languages_config = self.prompts.get("languages", {})
+        lang_config = languages_config.get(language, {})
+        
+        # Fallback to defaults if language not found
+        lang_instr = lang_config.get("instruction", "请全程使用中文进行对话。")
+        culture_instr = lang_config.get("culture", "Target Audience: Chinese.")
 
         # Use stock-specific prompt if stock_code is provided
         if stock_code:
@@ -76,6 +80,7 @@ class DialogueGenerator:
                 speakers_desc=speakers_desc,
                 history=history_text,
                 language_instruction=lang_instr,
+                culture_instruction=culture_instr,
             )
 
         template = self.prompts.get("default", "")
@@ -85,6 +90,7 @@ class DialogueGenerator:
             speakers_desc=speakers_desc,
             history=history_text,
             language_instruction=lang_instr,
+            culture_instruction=culture_instr,
         )
 
     def _extract_json(self, text: str) -> dict:

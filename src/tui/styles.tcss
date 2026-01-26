@@ -1,0 +1,169 @@
+/* Global Styles */
+Screen {
+    background: $surface;
+    color: $text;
+}
+
+/* Sidebar (Session List) */
+#sidebar {
+    width: 25%;
+    height: 100%;
+    dock: left;
+    border: round $primary;
+    background: $panel;
+    margin: 0 1 1 1;
+}
+
+#sidebar-header {
+    height: 3;
+    content-align: center middle;
+    background: $primary;
+    color: $text;
+    text-style: bold;
+}
+
+SessionList {
+    height: 1fr;
+    scrollbar-size: 1 1;
+}
+
+SessionList > ListItem {
+    padding: 1;
+    border-bottom: solid $surface-lighten-1;
+}
+
+SessionList > ListItem:hover {
+    background: $surface-lighten-1;
+}
+
+SessionList > ListItem.--highlight {
+    background: $secondary;
+    color: $text;
+    text-style: bold;
+}
+
+/* Main Content Area */
+#main-content {
+    height: 100%;
+    margin: 0 1 1 0;
+    border: round $accent;
+    background: $surface;
+}
+
+/* Dashboard View */
+Dashboard {
+    layout: vertical;
+    align: center middle;
+    padding: 2;
+}
+
+.stats-container {
+    layout: horizontal;
+    height: auto;
+    margin-bottom: 2;
+    align: center middle;
+}
+
+.stat-card {
+    width: 20;
+    height: 10;
+    border: round $success;
+    margin: 1;
+    align: center middle;
+    content-align: center middle;
+}
+
+.stat-value {
+    text-style: bold;
+    color: $success;
+}
+
+.stat-label {
+    color: $text-muted;
+}
+
+/* Session View */
+SessionView {
+    layout: vertical;
+    height: 100%;
+}
+
+#session-header {
+    height: 3;
+    padding: 0 1;
+    border-bottom: solid $accent;
+    background: $surface-lighten-1;
+    layout: horizontal;
+    align-vertical: middle;
+}
+
+#session-title {
+    width: 1fr;
+    text-style: bold;
+    color: $accent;
+}
+
+#session-status {
+    width: auto;
+    padding: 0 2;
+    background: $surface;
+    border: round gray;
+}
+
+.log-container {
+    height: 1fr;
+    border: solid $secondary;
+    margin: 1;
+    background: $surface-darken-1;
+    overflow-y: scroll;
+}
+
+Log {
+    background: transparent;
+}
+
+#session-actions {
+    height: auto;
+    padding: 1;
+    align: right middle;
+    border-top: solid $surface-lighten-1;
+}
+
+/* Dialogs / Modals */
+NewGenerationModal {
+    align: center middle;
+}
+
+#modal-dialog {
+    width: 60;
+    height: auto;
+    border: thick $primary;
+    background: $surface;
+    padding: 2;
+}
+
+#modal-title {
+    text-style: bold;
+    content-align: center middle;
+    margin-bottom: 2;
+}
+
+.topic-button {
+    width: 100%;
+    margin-bottom: 1;
+}
+
+/* Utility Classes */
+.text-success { color: $success; }
+.text-error { color: $error; }
+.text-warning { color: $warning; }
+.text-accent { color: $accent; }
+
+Button {
+    border: none;
+    height: 3;
+}
+Button:hover {
+    background: $accent;
+    color: $text;
+}

@@ -439,16 +439,32 @@ class VideoGenerator:
                 cover_source_image = image_paths[0]
                 title_overlay = title
 
+
+
+            # Calculate durations for content images first
+            durations = self._calculate_image_durations(
+                audio_duration, voice_segments, len(image_paths)
+            )
+
             if cover_source_image:
                 cover_path = output_dir / "cover.jpg"
                 self._create_cover_with_title(cover_source_image, cover_path, title_overlay)
                 print(f"🖼️ Cover image saved to: {cover_path}")
+                
+                # Insert cover at start with fixed duration (e.g. 3s)
+                # We steal time from the first image to maintain sync for the rest
+                COVER_DURATION = 1.0
+                if durations:
+                    # Reduce first image duration
+                    durations[0] = max(0.5, durations[0] - COVER_DURATION)
+                    durations.insert(0, COVER_DURATION)
+                    image_paths = [str(cover_path)] + image_paths
+                else:
+                    # Fallback if no images
+                    durations = [COVER_DURATION]
+                    image_paths = [str(cover_path)]
 
 
-            # Calculate durations
-            durations = self._calculate_image_durations(
-                audio_duration, voice_segments, len(image_paths)
-            )
 
 
             # Create subtitles if dialogue provided

@@ -34,6 +34,7 @@ output:
   video_format: "mp4"
   video_resolution: "1080x1920"
   audio_format: "mp3"
+  subtitle_font_size: 18         # Font size for subtitles
 
 # Audio processing settings
 audio:

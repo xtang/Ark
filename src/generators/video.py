@@ -35,6 +35,7 @@ class VideoGenerator:
         self.fade_duration = 1.0  # seconds for fade in/out
         self.transition_duration = 0.5  # seconds for image transitions
         self.subtitle_margin = 20  # pixels from bottom (lower = closer to bottom)
+        self.subtitle_font_size = config.get("output", {}).get("subtitle_font_size", 24)
 
     def _calculate_image_durations(
         self,
@@ -201,7 +202,7 @@ class VideoGenerator:
             # Escape special characters in path for FFmpeg
             escaped_path = subtitle_path.replace(":", "\\:").replace("'", "\\'")
             filter_parts.append(
-                f"[vfaded]subtitles='{escaped_path}':force_style='FontSize=24,PrimaryColour=&HFFFFFF&,"
+                f"[vfaded]subtitles='{escaped_path}':force_style='FontSize={self.subtitle_font_size},PrimaryColour=&HFFFFFF&,"
                 f"OutlineColour=&H000000&,Outline=2,MarginV={self.subtitle_margin}'[outv]"
             )
         else:

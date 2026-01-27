@@ -5,7 +5,7 @@ topics:
   life_tips: "生活常识"          # Daily life knowledge
   health: "健康保养"             # Health & wellness
   history: "历史野史"            # Historical stories
-  curiosity: "猎奇故事"          # Curiosity & mysteries
+  curiosity: "中国超自然神秘现象"          # Curiosity & mysteries
   stock_talk: "股票公司杂谈"      # Stock company talk (requires stock code)
 
 # Dialogue settings
@@ -54,7 +54,7 @@ output:
 
 # Video settings
 video:
-  mode: "veo_loop"  # Options: static_images, veo_loop
+  mode: "mixed"  # Options: static_images, veo_loop, mixed
   motion_effect: true    # Only applies to static_images mode
   veo:
     model: "veo-3.1-fast-generate-001"  # or veo-3.1-generate-001 (more expensive)

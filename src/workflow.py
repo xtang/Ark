@@ -98,6 +98,7 @@ class PodcastWorkflow:
             generation_id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
             dialogue=dialogue,
             title=title,  # Pass title for cover generation or Veo prompt
+            summary=summary,
             cover_image_path=cover_path
         )
         

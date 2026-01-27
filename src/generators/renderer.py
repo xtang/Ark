@@ -205,6 +205,7 @@ class VideoRenderer:
         audio_duration: float = 0,
         music_path: str | None = None,
         video_background_path: str | None = None,
+        video_intro_path: str | None = None,
     ) -> list[str]:
         """Build FFmpeg command."""
         width, height = self.resolution.split("x")
@@ -212,29 +213,53 @@ class VideoRenderer:
         inputs = []
         filter_parts = []
         
-        # Input 0: Visuals
+        # 1. Visual Inputs
+        current_input_idx = 0
+        
+        # Option A: Looping Video Background (Overrides everything else)
         if video_background_path:
             inputs.extend(["-stream_loop", "-1", "-i", video_background_path])
             filter_chain = (
-                f"[0:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                f"[{current_input_idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"setsar=1[vconcat]"
             )
             filter_parts.append(filter_chain)
+            current_input_idx += 1
+            
+        # Option B: Slideshow (possibly with Intro Video)
         else:
+            # Handle Intro Video
+            intro_stream = None
+            if video_intro_path:
+                inputs.extend(["-i", video_intro_path])
+                filter_chain = (
+                    f"[{current_input_idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                    f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"setsar=1[vintro]"
+                )
+                filter_parts.append(filter_chain)
+                intro_stream = "[vintro]"
+                current_input_idx += 1
+
+            # Handle Images
+            image_streams = []
             for i, (img_path, duration) in enumerate(zip(image_paths, durations)):
                 input_duration = duration + self.transition_duration
                 inputs.extend(["-loop", "1", "-t", str(input_duration), "-i", img_path])
+                
+                img_idx = current_input_idx
+                current_input_idx += 1
 
                 if self.enable_motion:
                     # Ken Burns
                     filter_chain = (
-                        f"[{i}:v]scale=1920:-2,zoompan=z='min(zoom+0.0005,1.15)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={self.resolution}:fps=24,"
+                        f"[{img_idx}:v]scale=1920:-2,zoompan=z='min(zoom+0.0005,1.15)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={self.resolution}:fps=24,"
                         f"setsar=1"
                     )
                 else:
                     filter_chain = (
-                        f"[{i}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                        f"[{img_idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
                         f"setsar=1"
                     )
@@ -242,29 +267,53 @@ class VideoRenderer:
                 if i < len(image_paths) - 1:
                     filter_chain += f",fade=t=out:st={duration - self.transition_duration}:d={self.transition_duration}"
                 
-                filter_chain += f"[v{i}]"
+                filter_chain += f"[vimg{i}]"
                 filter_parts.append(filter_chain)
+                image_streams.append(f"[vimg{i}]")
 
-            # Concat
-            if len(image_paths) > 1:
-                concat_parts = []
-                current_stream = "[v0]"
-                offset = durations[0] - self.transition_duration
+            # Concat Images (Slideshow)
+            slideshow_stream = None
+            if image_streams:
+                if len(image_streams) > 1:
+                    current_stream = image_streams[0]
+                    offset = durations[0] - self.transition_duration
 
-                for i in range(1, len(image_paths)):
-                    next_stream = f"[v{i}]"
-                    out_stream = f"[xf{i}]" if i < len(image_paths) - 1 else "[vconcat]"
-                    concat_parts.append(
-                        f"{current_stream}{next_stream}xfade=transition=fade:duration={self.transition_duration}:offset={offset:.2f}{out_stream}"
-                    )
-                    current_stream = out_stream
-                    offset += durations[i] - self.transition_duration
-            else:
-                concat_parts = ["[v0]copy[vconcat]"]
+                    for i in range(1, len(image_streams)):
+                        next_stream = image_streams[i]
+                        out_stream = f"[vslideshow{i}]"
+                        # Last one?
+                        is_last_image = (i == len(image_streams) - 1)
+                        
+                        filter_parts.append(
+                            f"{current_stream}{next_stream}xfade=transition=fade:duration={self.transition_duration}:offset={offset:.2f}{out_stream}"
+                        )
+                        current_stream = out_stream
+                        offset += durations[i] - self.transition_duration
+                    slideshow_stream = current_stream
+                else:
+                    slideshow_stream = image_streams[0]
             
-            filter_parts.extend(concat_parts)
+            # Final Concat of Intro + Slideshow
+            if intro_stream and slideshow_stream:
+                filter_parts.append(f"{intro_stream}{slideshow_stream}concat=n=2:v=1:a=0[vconcat]")
+            elif intro_stream:
+                filter_parts.append(f"{intro_stream}copy[vconcat]")
+            elif slideshow_stream:
+                # If only one image and no fade logic was applied properly above?
+                # Actually image_streams logic above handles single image case but assigns it to slideshow_stream
+                if len(image_streams) == 1:
+                     filter_parts.append(f"{slideshow_stream}copy[vconcat]")
+                else:
+                    # Rename the last slideshow output to vconcat
+                    # Hacky string replace or just assert it ends with [vconcat] if I named it right?
+                    # I named it [vslideshow{i}] above.
+                    # Let's just add a copy filter/rename
+                    filter_parts.append(f"{slideshow_stream}copy[vconcat]")
+            else:
+                 # No visual inputs? Should happen upstream
+                 raise RuntimeError("No visual inputs provided (no video background, intro, or images)")
 
-        # Fade Out
+        # Fade Out of Final Video
         fade_out_start = audio_duration + 2.0 - self.fade_duration
         filter_parts.append(
             f"[vconcat]fade=t=out:st={fade_out_start}:d={self.fade_duration}[vfaded]"
@@ -281,8 +330,9 @@ class VideoRenderer:
             filter_parts.append("[vfaded]copy[outv]")
 
         # Audio
-        audio_input_idx = 1 if video_background_path else len(image_paths)
+        audio_input_idx = current_input_idx
         inputs.extend(["-i", audio_path])
+        current_input_idx += 1
         
         voice_filter = (
             f"[{audio_input_idx}:a]apad=pad_dur=2,"
@@ -295,7 +345,8 @@ class VideoRenderer:
         music_input_idx = None
         if music_path:
             inputs.extend(["-i", music_path])
-            music_input_idx = audio_input_idx + 1
+            music_input_idx = current_input_idx
+            current_input_idx += 1
 
         if music_input_idx is not None:
              music_filter = (
@@ -340,6 +391,7 @@ class VideoRenderer:
         subtitle_path: str | None = None,
         music_path: str | None = None,
         video_background_path: str | None = None,
+        video_intro_path: str | None = None,
     ) -> None:
         """Execute FFmpeg command to render video."""
         cmd = self.build_ffmpeg_command(
@@ -351,6 +403,7 @@ class VideoRenderer:
             audio_duration,
             music_path,
             video_background_path,
+            video_intro_path,
         )
 
         # Save command for debugging

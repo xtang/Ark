@@ -80,13 +80,31 @@ class VideoGenerator:
         self,
         generation_id: int,
         title: str | None,
+        summary: str | None,
         output_dir: Path,
     ) -> str:
         """Prepare Veo video asset."""
-        print("🎥 Using Veo Loop Mode...")
-        veo_prompt = "A high quality, cinematic video background." 
-        if title:
-            veo_prompt = f"Cinematic background for podcast about {title}, professional studio setting, 4k, highly detailed, subtle motion."
+        print("🎥 Preparing Veo Video Asset...")
+        
+        # Default prompt
+        veo_prompt = "A high quality, cinematic video background, abstract shapes, slow motion." 
+        
+        if summary:
+             # Use summary for context-aware background
+             # Truncate summary to avoid too long prompts
+             safe_summary = summary[:400]
+             veo_prompt = (
+                 f"Cinematic B-roll footage representing: {safe_summary}. "
+                 "Photorealistic, 4k, high detailed, slow motion, ambient, "
+                 "no people, no text, no microphones, nature or city atmosphere."
+             )
+        elif title:
+            veo_prompt = (
+                f"Cinematic B-roll footage for a story about {title}. "
+                "Photorealistic, 4k, high detailed, slow motion, ambient."
+            )
+        
+        print(f"   Prompt: {veo_prompt}")
         
         veo_path = output_dir / f"veo_bg_{generation_id}.mp4"
         
@@ -110,6 +128,7 @@ class VideoGenerator:
         output_dir: Path,
         dialogue: list[dict] | None = None,
         title: str | None = None,
+        summary: str | None = None,
         cover_image_path: str | None = None,
     ) -> str:
         """
@@ -124,6 +143,7 @@ class VideoGenerator:
             output_dir: Directory to save output.
             dialogue: Optional dialogue for subtitles.
             title: Optional title for cover/prompt.
+            summary: Optional summary for Veo prompt context.
             cover_image_path: Optional path to dedicated AI-generated cover image.
 
         Returns:
@@ -143,12 +163,36 @@ class VideoGenerator:
             final_image_paths = []
             durations = []
             video_background_path = None
+            video_intro_path = None
 
             # 2. Prepare Visual Assets based on Mode
             if video_mode == "veo_loop":
                 video_background_path = self._prepare_veo_visuals(
-                    generation_id, title, output_dir
+                    generation_id, title, summary, output_dir
                 )
+            elif video_mode == "mixed":
+                # Generate Intro Video
+                video_intro_path = self._prepare_veo_visuals(
+                    generation_id, title, summary, output_dir
+                )
+                
+                # Get Veo duration from config
+                veo_config = self.config.get("video", {}).get("veo", {})
+                veo_duration = veo_config.get("duration_seconds", 8) 
+                
+                remaining_duration = audio_duration - veo_duration
+                
+                if remaining_duration > 0:
+                     # For mixed mode, we distribute images evenly over the remaining time
+                     # We pass empty voice_segments because we don't want to try aligning to words 
+                     # that might have happened during the intro video.
+                     final_image_paths, durations = self._prepare_static_visuals(
+                        image_paths, remaining_duration, [], output_dir, None, None
+                    )
+                else:
+                    final_image_paths = []
+                    durations = []
+
             elif video_mode == "static_images":
                 final_image_paths, durations = self._prepare_static_visuals(
                     image_paths, audio_duration, voice_segments, output_dir, title, cover_image_path
@@ -183,7 +227,8 @@ class VideoGenerator:
                 durations=durations,
                 subtitle_path=subtitle_path,
                 music_path=music_path,
-                video_background_path=video_background_path
+                video_background_path=video_background_path,
+                video_intro_path=video_intro_path
             )
 
             # 6. Update DB (Success)

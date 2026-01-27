@@ -27,56 +27,31 @@ def run_cli(topic_key: str, config_path: str | None = None, stock_code: str | No
 
         # Create generation record
         generation = db.create_generation(topic_key, topic_name)
-        gen_output_dir = output_dir / f"gen_{generation.id}"
-
-        # Step 1: Dialogue
-        print("📝 Step 1/4: 生成对话内容...")
-        dialogue_gen = DialogueGenerator(config, db)
-        dialogue, references, summary, title = dialogue_gen.generate(
-            generation.id, topic_key, topic_name, gen_output_dir,
-            stock_code=stock_code
+        
+        # Initialize Workflow
+        from .workflow import PodcastWorkflow
+        workflow = PodcastWorkflow(config, db, logger=print)
+        
+        # Run Workflow
+        video_path = workflow.run(
+            generation_id=generation.id,
+            topic_key=topic_key,
+            topic_name=topic_name,
+            output_dir=output_dir,
+            stock_code=stock_code,
+            language="CN" # Default CLI language
         )
-        print(f"  ✓ 完成，共 {len(dialogue)} 句对话")
-        print(f"  📌 标题: {title}")
-
-        # Step 2: Audio
-        print("🔊 Step 2/4: 生成语音...")
-        audio_gen = AudioGenerator(config, db)
-        audio_path, duration, voice_segments = audio_gen.generate(
-            generation.id, dialogue, gen_output_dir
-        )
-        print(f"  ✓ 完成，时长 {duration:.1f} 秒")
-
-
-        # Step 3: Images
-        print("🖼️ Step 3/4: 生成图片...")
-        image_gen = ImageGenerator(config, db)
-        image_paths = image_gen.generate(generation.id, dialogue, summary, gen_output_dir)
-        print(f"  ✓ 完成，共 {len(image_paths)} 张图片")
-
-        # Generate dedicated cover
-        print("🎨 生成封面图...")
-        cover_path = image_gen.generate_cover(generation.id, title, summary, gen_output_dir)
-        if cover_path:
-            print(f"  ✓ 封面图已生成: {cover_path}")
-
-        # Step 4: Video
-        print("🎬 Step 4/4: 生成视频...")
-        video_gen = VideoGenerator(config, db)
-        video_path = video_gen.generate(
-            generation.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
-            dialogue=dialogue,
-            title=title,  # Pass title for cover generation
-            cover_image_path=cover_path
-        )
-
-        print(f"  ✓ 完成!")
-
+        
         print(f"\n✅ 视频已生成: {video_path}")
-        print(f"📄 摘要: {summary}")
-        print("📚 参考资料:")
-        for ref in references[:5]:
-            print(f"   • {ref}")
+        # Note: Summary/References are inside generators, if we need them here we might need to 
+        # return them from workflow.run, but for now simple output is enough or we query DB.
+        # But to match exact previous output, let's keep it simple or query DB.
+        # For CLI, just showing video path is often enough, but let's see.
+        
+        # Fetch generation to get summary for display
+        updated_gen = db.get_generation(generation.id)
+        # Not easily available without querying specific tables or returning complex object.
+        # Let's simplify CLI output to just Video Path for now to match the refactor request.
 
     except Exception as e:
         import traceback

@@ -52,6 +52,18 @@ output:
   audio_format: "mp3"
   subtitle_font_size: 18         # Font size for subtitles
 
+# Video settings
+video:
+  mode: "veo_loop"  # Options: static_images, veo_loop
+  motion_effect: true    # Only applies to static_images mode
+  veo:
+    model: "veo-3.1-fast-generate-001"  # or veo-3.1-generate-001 (more expensive)
+    project_id: ""       # Leave empty to use GOOGLE_CLOUD_PROJECT env var
+    location: "us-central1"
+    duration_seconds: 8  # 4 or 8
+    resolution: "720p"   # 720p or 1080p
+    aspect_ratio: "9:16"
+
 # Audio processing settings
 audio:
   speed_ratio: 1.05              # Speed up factor (e.g. 1.25x faster)

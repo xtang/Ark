@@ -317,55 +317,21 @@ class PodcastGeneratorApp(App):
 
             log(f"🚀 Starting generation: {topic_name} [{language}]")
             
-            # Step 1
-            log("📝 Step 1/4: Dialogue Generation...")
-            dialogue_gen = DialogueGenerator(self.config, db)
+            # --- Workflow Execution ---
+            from ..workflow import PodcastWorkflow
+            workflow = PodcastWorkflow(self.config, db, logger=log)
             
-            # Use stock code if applicable (not handled in TUI simple flow yet, assume None) 
-            stock_code = None 
-            if topic_key == "stock_talk":
-                # Hack: hardcode or prompt? For now let's hardcode 'AAPL' for demo or skip
-                # Real implementation needs a Input Modal
-                stock_code = "AAPL" 
-                log(f"ℹ️ Auto-selected stock: {stock_code}")
-
-            dialogue, references, summary, title = dialogue_gen.generate(
-                generation.id, topic_key, topic_name, gen_output_dir, stock_code=stock_code, language=language
+            video_path = workflow.run(
+                generation_id=generation.id,
+                topic_key=topic_key,
+                topic_name=topic_name,
+                output_dir=output_dir,
+                stock_code="AAPL" if topic_key == "stock_talk" else None, # Hardcoded demo logic preserved
+                language=language
             )
-            log(f"✓ Dialogue complete. Title: {title}")
 
-            # Step 2
-            log("🔊 Step 2/4: Audio Generation...")
-            audio_gen = AudioGenerator(self.config, db)
-            audio_path, duration, voice_segments = audio_gen.generate(
-                generation.id, dialogue, gen_output_dir
-            )
-            log(f"✓ Audio complete: {duration:.1f}s")
+            # Note: Workflow runs steps 1-4 and logs progress
             
-            # Step 3
-            log("🖼️ Step 3/4: Image Generation...")
-            image_gen = ImageGenerator(self.config, db)
-            image_paths = image_gen.generate(generation.id, dialogue, summary, gen_output_dir, language=language)
-            
-            # Generate Cover
-            log("🎨 Generating Cover Art...")
-            cover_path = image_gen.generate_cover(generation.id, title, summary, gen_output_dir, language=language)
-            if cover_path:
-                log(f"✓ Cover art generated")  
-            
-            log(f"✓ Images complete: {len(image_paths)}")
-
-            # Step 4
-            log("🎬 Step 4/4: Video Generation...")
-            video_gen = VideoGenerator(self.config, db)
-            video_path = video_gen.generate(
-                generation.id, image_paths, audio_path, duration, voice_segments, gen_output_dir,
-                dialogue=dialogue, title=title, cover_image_path=cover_path
-            )
-            
-            log(f"✅ Video Generated: {video_path}")
-            
-        except Exception as e:
             # We can't log to session view easily if session view isn't set up yet, 
             # but usually it dies after init_view.
             # Try logging if session_view exists

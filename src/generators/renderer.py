@@ -206,114 +206,135 @@ class VideoRenderer:
         music_path: str | None = None,
         video_background_path: str | None = None,
         video_intro_path: str | None = None,
+        cover_path: str | None = None,
+        cover_duration: float = 0,
+        enable_transitions: bool = True,
     ) -> list[str]:
         """Build FFmpeg command."""
         width, height = self.resolution.split("x")
         
         inputs = []
         filter_parts = []
+        concat_nodes = []
         
-        # 1. Visual Inputs
-        current_input_idx = 0
+        # Helper to process an image input
+        def add_image_input(path, duration, label):
+            inputs.extend(["-loop", "1", "-t", str(duration), "-i", path])
+            idx = len(inputs) // 2 - 1  # -loop 1 -t D -i P -> 2 args before -i? No, inputs list. 
+            # inputs list grows: ["-loop", "1", "-t", "...", "-i", "..."] -> 6 items per image.
+            # But we are extending list. Let's track index manually.
+            return idx
+
+        input_counter = 0
+        def get_next_input_idx():
+            nonlocal input_counter
+            idx = input_counter
+            input_counter += 1
+            return idx
+
+        # --- Visual Inputs ---
         
-        # Option A: Looping Video Background (Overrides everything else)
+        # 1. Video Background (Loops, overrides everything)
         if video_background_path:
             inputs.extend(["-stream_loop", "-1", "-i", video_background_path])
-            filter_chain = (
-                f"[{current_input_idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+            idx = get_next_input_idx()
+            filter_parts.append(
+                f"[{idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                 f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
                 f"setsar=1[vconcat]"
             )
-            filter_parts.append(filter_chain)
-            current_input_idx += 1
             
-        # Option B: Slideshow (possibly with Intro Video)
         else:
-            # Handle Intro Video
-            intro_stream = None
+            # Sequence: [Cover] -> [Intro Video] -> [Slideshow Images]
+            
+            # A. Cover Image
+            if cover_path and cover_duration > 0:
+                inputs.extend(["-loop", "1", "-t", str(cover_duration), "-i", cover_path])
+                idx = get_next_input_idx()
+                
+                # Simple scale (no motion) for cover usually
+                filter_parts.append(
+                    f"[{idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                    f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
+                    f"setsar=1[v_cover]"
+                )
+                concat_nodes.append("[v_cover]")
+
+            # B. Intro Video
             if video_intro_path:
                 inputs.extend(["-i", video_intro_path])
-                filter_chain = (
-                    f"[{current_input_idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                idx = get_next_input_idx()
+                filter_parts.append(
+                    f"[{idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                     f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
-                    f"setsar=1[vintro]"
+                    f"setsar=1[v_intro]"
                 )
-                filter_parts.append(filter_chain)
-                intro_stream = "[vintro]"
-                current_input_idx += 1
+                concat_nodes.append("[v_intro]")
 
-            # Handle Images
-            image_streams = []
+            # C. Slideshow Images
+            slideshow_nodes = []
             for i, (img_path, duration) in enumerate(zip(image_paths, durations)):
-                input_duration = duration + self.transition_duration
+                # If transitions enable, we need extra overlap time. If not, just duration.
+                # However, for hard cuts, duration is exact.
+                # For crossfades, input length = duration + transition.
+                
+                input_duration = duration
+                if enable_transitions and i < len(image_paths) - 1:
+                     input_duration += self.transition_duration
+
                 inputs.extend(["-loop", "1", "-t", str(input_duration), "-i", img_path])
-                
-                img_idx = current_input_idx
-                current_input_idx += 1
+                idx = get_next_input_idx()
 
-                if self.enable_motion:
-                    # Ken Burns
-                    filter_chain = (
-                        f"[{img_idx}:v]scale=1920:-2,zoompan=z='min(zoom+0.0005,1.15)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={self.resolution}:fps=24,"
-                        f"setsar=1"
+                node_name = f"v_img_{i}"
+                if self.enable_motion and enable_transitions:
+                    # Ken Burns only if transitions enabled/requested? Or always?
+                    # User said "不需要渐入效果" (no fade in). Might imply static images or just hard cuts.
+                    # Let's keep motion if configured, but do hard cuts.
+                    filter_parts.append(
+                        f"[{idx}:v]scale=1920:-2,zoompan=z='min(zoom+0.0005,1.15)':d=700:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s={self.resolution}:fps=24,"
+                        f"setsar=1[{node_name}]"
                     )
                 else:
-                    filter_chain = (
-                        f"[{img_idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
+                    filter_parts.append(
+                        f"[{idx}:v]scale={width}:{height}:force_original_aspect_ratio=decrease,"
                         f"pad={width}:{height}:(ow-iw)/2:(oh-ih)/2:black,"
-                        f"setsar=1"
+                        f"setsar=1[{node_name}]"
                     )
+                slideshow_nodes.append(f"[{node_name}]")
 
-                if i < len(image_paths) - 1:
-                    filter_chain += f",fade=t=out:st={duration - self.transition_duration}:d={self.transition_duration}"
-                
-                filter_chain += f"[vimg{i}]"
-                filter_parts.append(filter_chain)
-                image_streams.append(f"[vimg{i}]")
-
-            # Concat Images (Slideshow)
-            slideshow_stream = None
-            if image_streams:
-                if len(image_streams) > 1:
-                    current_stream = image_streams[0]
+            # Combine Slideshow Images
+            if slideshow_nodes:
+                if enable_transitions and len(slideshow_nodes) > 1:
+                    # XFADE Logic
+                    current = slideshow_nodes[0]
                     offset = durations[0] - self.transition_duration
-
-                    for i in range(1, len(image_streams)):
-                        next_stream = image_streams[i]
-                        out_stream = f"[vslideshow{i}]"
-                        # Last one?
-                        is_last_image = (i == len(image_streams) - 1)
-                        
+                    for i in range(1, len(slideshow_nodes)):
+                        next_node = slideshow_nodes[i]
+                        out_node = f"[v_slide_out_{i}]"
                         filter_parts.append(
-                            f"{current_stream}{next_stream}xfade=transition=fade:duration={self.transition_duration}:offset={offset:.2f}{out_stream}"
+                            f"{current}{next_node}xfade=transition=fade:duration={self.transition_duration}:offset={offset:.2f}{out_node}"
                         )
-                        current_stream = out_stream
+                        current = out_node
                         offset += durations[i] - self.transition_duration
-                    slideshow_stream = current_stream
+                    concat_nodes.append(current)
                 else:
-                    slideshow_stream = image_streams[0]
-            
-            # Final Concat of Intro + Slideshow
-            if intro_stream and slideshow_stream:
-                filter_parts.append(f"{intro_stream}{slideshow_stream}concat=n=2:v=1:a=0[vconcat]")
-            elif intro_stream:
-                filter_parts.append(f"{intro_stream}copy[vconcat]")
-            elif slideshow_stream:
-                # If only one image and no fade logic was applied properly above?
-                # Actually image_streams logic above handles single image case but assigns it to slideshow_stream
-                if len(image_streams) == 1:
-                     filter_parts.append(f"{slideshow_stream}copy[vconcat]")
-                else:
-                    # Rename the last slideshow output to vconcat
-                    # Hacky string replace or just assert it ends with [vconcat] if I named it right?
-                    # I named it [vslideshow{i}] above.
-                    # Let's just add a copy filter/rename
-                    filter_parts.append(f"{slideshow_stream}copy[vconcat]")
-            else:
-                 # No visual inputs? Should happen upstream
-                 raise RuntimeError("No visual inputs provided (no video background, intro, or images)")
+                    # HARD CUTS (Concat) or Single Image
+                    # If multiple images, we need to concat them first or just add to main concat list?
+                    # We can add them all to main concat list directly.
+                    concat_nodes.extend(slideshow_nodes)
 
-        # Fade Out of Final Video
+            # Final Concat of All Parts
+            if concat_nodes:
+                if len(concat_nodes) > 1:
+                    filter_parts.append(f"{''.join(concat_nodes)}concat=n={len(concat_nodes)}:v=1:a=0[vconcat]")
+                else:
+                    filter_parts.append(f"{concat_nodes[0]}copy[vconcat]")
+            else:
+                 raise RuntimeError("No visual inputs provided.")
+
+        # Fade Out of Final Video (Visual)
+        # Calculate Fade Start based on total expected duration or audio duration?
+        # User wants valid fade out.
         fade_out_start = audio_duration + 2.0 - self.fade_duration
         filter_parts.append(
             f"[vconcat]fade=t=out:st={fade_out_start}:d={self.fade_duration}[vfaded]"
@@ -329,33 +350,33 @@ class VideoRenderer:
         else:
             filter_parts.append("[vfaded]copy[outv]")
 
-        # Audio
-        audio_input_idx = current_input_idx
+        # --- Audio Inputs ---
+        audio_idx = input_counter
         inputs.extend(["-i", audio_path])
-        current_input_idx += 1
+        input_counter += 1
         
+        # Audio Fades: "声音开头和结尾需要有渐入和渐出"
         voice_filter = (
-            f"[{audio_input_idx}:a]apad=pad_dur=2,"
-            f"afade=t=in:st=0:d={self.fade_duration},"
+            f"[{audio_idx}:a]apad=pad_dur=2,"
+            f"afade=t=in:st=0:d={self.fade_duration}," 
             f"afade=t=out:st={audio_duration + 2.0 - 2.0}:d=2.0[voice_a]"
         )
         filter_parts.append(voice_filter)
         
         # Music
-        music_input_idx = None
+        music_filter = None
         if music_path:
+            music_idx = input_counter
             inputs.extend(["-i", music_path])
-            music_input_idx = current_input_idx
-            current_input_idx += 1
-
-        if music_input_idx is not None:
-             music_filter = (
-                f"[{music_input_idx}:a]aloop=loop=-1:size=2e+09,"
+            input_counter += 1
+            music_filter = (
+                f"[{music_idx}:a]aloop=loop=-1:size=2e+09,"
                 f"volume=0.1,"
+                f"afade=t=in:st=0:d={self.fade_duration}," # Also fade in music
                 f"afade=t=out:st={audio_duration + 2.0 - 2.0}:d=2.0[music_a]"
             )
-             filter_parts.append(music_filter)
-             filter_parts.append(f"[voice_a][music_a]amix=inputs=2:duration=first:dropout_transition=2[outa]")
+            filter_parts.append(music_filter)
+            filter_parts.append(f"[voice_a][music_a]amix=inputs=2:duration=first:dropout_transition=2[outa]")
         else:
              filter_parts.append(f"[voice_a]acopy[outa]")
 
@@ -392,6 +413,9 @@ class VideoRenderer:
         music_path: str | None = None,
         video_background_path: str | None = None,
         video_intro_path: str | None = None,
+        cover_path: str | None = None,
+        cover_duration: float = 0,
+        enable_transitions: bool = True,
     ) -> None:
         """Execute FFmpeg command to render video."""
         cmd = self.build_ffmpeg_command(
@@ -404,6 +428,9 @@ class VideoRenderer:
             music_path,
             video_background_path,
             video_intro_path,
+            cover_path,
+            cover_duration,
+            enable_transitions,
         )
 
         # Save command for debugging

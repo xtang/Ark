@@ -96,7 +96,7 @@ class VideoGenerator:
              veo_prompt = (
                  f"Cinematic B-roll footage representing: {safe_summary}. "
                  "Photorealistic, 4k, high detailed, slow motion, ambient, "
-                 "no people, no text, no microphones, nature or city atmosphere."
+                 "no text, no microphones"
              )
         elif title:
             veo_prompt = (
@@ -176,22 +176,25 @@ class VideoGenerator:
                     generation_id, title, summary, output_dir
                 )
                 
-                # Get Veo duration from config
+                # Durations
                 veo_config = self.config.get("video", {}).get("veo", {})
-                veo_duration = veo_config.get("duration_seconds", 8) 
+                veo_duration = veo_config.get("duration_seconds", 8)
+                cover_duration = 3.0
                 
-                remaining_duration = audio_duration - veo_duration
+                remaining_duration = audio_duration - veo_duration - cover_duration
                 
                 if remaining_duration > 0:
                      # For mixed mode, we distribute images evenly over the remaining time
-                     # We pass empty voice_segments because we don't want to try aligning to words 
-                     # that might have happened during the intro video.
                      final_image_paths, durations = self._prepare_static_visuals(
                         image_paths, remaining_duration, [], output_dir, None, None
                     )
                 else:
                     final_image_paths = []
                     durations = []
+                
+                # Ensure we have a cover path for the renderer
+                if not cover_image_path and image_paths:
+                     cover_image_path = image_paths[0]
 
             elif video_mode == "static_images":
                 final_image_paths, durations = self._prepare_static_visuals(
@@ -228,7 +231,10 @@ class VideoGenerator:
                 subtitle_path=subtitle_path,
                 music_path=music_path,
                 video_background_path=video_background_path,
-                video_intro_path=video_intro_path
+                video_intro_path=video_intro_path,
+                cover_path=cover_image_path if video_mode == "mixed" else None,
+                cover_duration=cover_duration if video_mode == "mixed" else 0,
+                enable_transitions=(video_mode != "mixed"), # Disable transitions for mixed mode
             )
 
             # 6. Update DB (Success)

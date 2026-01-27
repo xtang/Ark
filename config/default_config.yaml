@@ -5,8 +5,9 @@ topics:
   life_tips: "生活常识"          # Daily life knowledge
   health: "健康保养"             # Health & wellness
   history: "历史野史"            # Historical stories
-  curiosity: "中国超自然神秘现象"          # Curiosity & mysteries
+  curiosity: "中国离奇的鬼怪神秘故事"          # Curiosity & mysteries
   stock_talk: "股票公司杂谈"      # Stock company talk (requires stock code)
+  myth: "中国怪诞奇谭"
 
 # Dialogue settings
 dialogue:

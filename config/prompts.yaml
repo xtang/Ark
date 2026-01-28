@@ -48,6 +48,7 @@ default: |
   ```
 
 # Stock talk prompt template
+# Stock talk prompt template
 stock_talk: |
   {culture_instruction}
   请根据股票代码「{stock_code}」生成一段关于该公司的双人对话脚本。
@@ -91,6 +92,47 @@ stock_talk: |
     ],
     "references": ["参考来源1（带URL）", "参考来源2（带URL）"],
     "summary": "一句话概括：公司名称 + 核心亮点"
+  }}
+  ```
+
+# Daily China Finance prompt template
+daily_china_finance: |
+  {culture_instruction}
+  请生成一段关于「今日中国财经新闻与股市复盘」的双人对话脚本。
+  
+  {language_instruction}
+
+  首先，请使用 Google Search 工具查找**今日**（或最近一个交易日）的中国财经头条新闻、A股/港股大盘走势、以及热门板块或个股表现。
+  
+  ## 必须涵盖的内容
+  1. **大盘综述**：今日股市涨跌情况，主要指数表现。
+  2. **核心热点**：今日最重要的一到两条财经新闻（如政策发布、行业爆发、突发事件）。
+  3. **市场情绪**：投资者情绪如何，有什么特别的现象。
+
+  ## 要求
+  1. **内容真实可查**：所有信息必须是真实的，**必须基于实时的搜索结果**。请在对话中提及具体的新闻来源或数据。
+  2. **对话时长**：总字数约{word_count}字，适合90秒的正常语速朗读。
+  3. **对话者**：{speakers_desc}
+  4. **风格**：专业、及时、犀利，像财经新闻评论节目。
+  5. **极简结构**：开门见山，直接讨论今日最热话题。
+  6. **情感与音效控制**（ElevenLabs V3）：
+     请在对话中适当地使用以下标签来增强表现力（Tags必须使用英文方括号）：
+     - **情绪/语气**：`[professional]` (专业), `[urgent]` (紧迫), `[serious]` (严肃), `[analytical]` (分析), `[surprised]` (惊讶)
+     - **节奏与强调**：使用省略号 `...` 表示停顿，`[firmly]` (坚定地) 表示强调。
+  7. **避免重复**：请避开以下最近已经讨论过的内容：
+  {history}
+
+  ## 输出格式
+  请严格按照以下JSON格式输出，不要包含任何其他文字：
+  ```json
+  {{
+    "title": "封面标题（6-12个字，包含今日核心热点）",
+    "dialogue": [
+      {{"speaker": "角色名", "text": "对话内容"}},
+      {{"speaker": "角色名", "text": "对话内容"}}
+    ],
+    "references": ["新闻来源1（带URL）", "新闻来源2（带URL）"],
+    "summary": "一句话概括：日期 + 核心财经事件"
   }}
   ```
 

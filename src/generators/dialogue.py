@@ -51,6 +51,7 @@ class DialogueGenerator:
         self,
         topic_name: str,
         history: list[str],
+        topic_key: str | None = None,
         stock_code: str | None = None,
         language: str = "CN",
     ) -> str:
@@ -85,6 +86,17 @@ class DialogueGenerator:
         # Fallback to defaults if language not found
         lang_instr = lang_config.get("instruction", "请全程使用中文进行对话。")
         culture_instr = lang_config.get("culture", "Target Audience: Chinese.")
+
+        # Special handling for daily_china_finance
+        if topic_key == "daily_china_finance":
+            template = self.prompts.get("daily_china_finance", "")
+            return template.format(
+                word_count=word_count,
+                speakers_desc=speakers_desc,
+                history=history_text,
+                language_instruction=lang_instr,
+                culture_instruction=culture_instr,
+            )
 
         # Use stock-specific prompt if stock_code is provided
         if stock_code:
@@ -153,7 +165,7 @@ class DialogueGenerator:
 
         # Fetch recent history to avoid repetition
         history = self.db.get_topic_summary_history(topic_key, limit=5)
-        prompt = self._build_prompt(topic_name, history, stock_code=stock_code, language=language)
+        prompt = self._build_prompt(topic_name, history, topic_key=topic_key, stock_code=stock_code, language=language)
 
         # Create DB record
         req = self.db.create_dialogue_request(generation_id, prompt)
@@ -162,7 +174,7 @@ class DialogueGenerator:
             # Configure generation
             tools = []
             model_name = self.model
-            if stock_code or topic_key == "stock_talk":
+            if stock_code or topic_key in ["stock_talk", "daily_china_finance"]:
                 tools = [self.grounding_tool]
                 model_name = "gemini-3-pro-preview"
 

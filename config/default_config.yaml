@@ -8,6 +8,7 @@ topics:
   curiosity: "中国离奇的鬼怪神秘故事"          # Curiosity & mysteries
   stock_talk: "股票公司杂谈"      # Stock company talk (requires stock code)
   myth: "中国怪诞奇谭"
+  daily_china_finance: "每日中国财经重要新闻"
 
 # Dialogue settings
 dialogue:
@@ -55,7 +56,7 @@ output:
 
 # Video settings
 video:
-  mode: "mixed"  # Options: static_images, veo_loop, mixed
+  mode: "static_images"  # Options: static_images, veo_loop, mixed
   motion_effect: true    # Only applies to static_images mode
   veo:
     model: "veo-3.1-fast-generate-001"  # or veo-3.1-generate-001 (more expensive)

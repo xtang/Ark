@@ -325,10 +325,32 @@ def run_tui(config_path: str | None = None) -> None:
 
 def main() -> None:
     """Main entry point with CLI argument parsing."""
+    # Load config early to get available topics for CLI
+    try:
+        temp_config = load_config(None)  # Default config
+        available_topics = list(temp_config.get("topics", {}).keys())
+    except:
+        # Fallback if config load fails (shouldn't happen in normal usage)
+        temp_config = {}
+        available_topics = ["life_tips", "health", "history", "curiosity", "stock_talk", "daily_china_finance"]
+
+    # Construct dynamic topic list for help
+    topic_help = ["Available topics:"]
+    topics_config = temp_config.get("topics", {})
+    if topics_config:
+        max_key_len = max(len(k) for k in topics_config.keys())
+        for key, value in topics_config.items():
+            topic_help.append(f"  {key:<{max_key_len}} - {value}")
+    else:
+        # Fallback
+        topic_help.append("  (No topics found in config)")
+    
+    topic_help_str = "\n".join(topic_help)
+
     parser = argparse.ArgumentParser(
         description="AI Podcast Generator - Generate short podcast videos using AI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
+        epilog=f"""
 Examples:
   # Run interactive TUI
   uv run python -m src.main
@@ -345,20 +367,17 @@ Examples:
   # Show details for a specific session
   uv run python -m src.main --show 5
 
-Available topics:
-  life_tips   - 生活常识 (Daily life knowledge)
-  health      - 健康保养 (Health & wellness)
-  history     - 历史野史 (Historical stories)
-  curiosity   - 猎奇故事 (Curiosity & mysteries)
-  stock_talk  - 股票公司杂谈 (Stock company talk, requires --stock)
+{topic_help_str}
         """,
     )
+
+
 
     parser.add_argument(
         "--topic",
         "-t",
         type=str,
-        choices=["life_tips", "health", "history", "curiosity", "stock_talk"],
+        choices=available_topics,
         help="Topic to generate (runs in CLI mode)",
     )
 

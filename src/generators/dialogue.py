@@ -3,6 +3,7 @@
 import json
 import os
 import re
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -79,9 +80,22 @@ class DialogueGenerator:
         if not speakers:
              speakers = []
 
+        # Build speaker names list for strict matching
+        speaker_names = [s['name'] for s in speakers]
         speakers_desc = "、".join(
             f"{s['name']}（{s['role']}）" for s in speakers
         )
+        # Add explicit instruction about using exact names
+        speakers_desc += f"\n     **【重要】JSON 中的 speaker 字段只能填写：{speaker_names}，禁止使用其他名字！**"
+
+        # Build JSON example with actual speaker names
+        if len(speaker_names) == 1:
+            # Single speaker (monologue)
+            speakers_json_example = f'{{"speaker": "{speaker_names[0]}", "text": "对话内容"}}'
+        else:
+            # Multiple speakers
+            examples = [f'{{"speaker": "{name}", "text": "对话内容"}}' for name in speaker_names[:2]]
+            speakers_json_example = ",\n      ".join(examples)
 
         # 2. Resolve Word Count
         word_count = topic_conf.get("word_count")
@@ -116,14 +130,21 @@ class DialogueGenerator:
 
         # 5. Format Prompt
         # Handle variations in available keys for formatting
+        today = datetime.now()
+        current_date = today.strftime("%Y年%m月%d日")
+        current_date_search = today.strftime("%Y-%m-%d")  # For search queries
+
         format_args = {
             "topic": topic_name,
             "word_count": word_count,
             "speakers_desc": speakers_desc,
+            "speakers_json_example": speakers_json_example,
             "history": history_text,
             "language_instruction": lang_instr,
             "culture_instruction": culture_instr,
-            "stock_code": stock_code or ""
+            "stock_code": stock_code or "",
+            "current_date": current_date,
+            "current_date_search": current_date_search,
         }
 
         return template.format(**format_args)
@@ -251,7 +272,15 @@ class DialogueGenerator:
                         response_text += chunk.text
 
             # Parse response
-            data = self._extract_json(response_text)
+            if not response_text or not response_text.strip():
+                raise ValueError(f"Empty response from LLM. Model: {model_name}")
+
+            # Debug: print first 500 chars of response if no JSON found
+            try:
+                data = self._extract_json(response_text)
+            except ValueError as e:
+                print(f"DEBUG: Response text (first 1000 chars):\n{response_text[:1000]}")
+                raise
             dialogue = data.get("dialogue", [])
             references = data.get("references", [])
             summary = data.get("summary", "")

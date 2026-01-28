@@ -111,12 +111,10 @@ class AudioGenerator:
             for line in dialogue:
                 speaker = line.get("speaker")
                 text = line.get("text", "")
-
                 voice_id = self.voice_map.get(speaker)
                 if not voice_id:
                     # Try fallback to role map
                     voice_id = self.role_map.get(speaker)
-                
                 if not voice_id:
                     # Provide helpful error message listing available speakers
                     known_speakers = list(self.voice_map.keys()) + list(self.role_map.keys())
@@ -133,10 +131,31 @@ class AudioGenerator:
                 "Content-Type": "application/json",
             }
 
+            # Build payload with optional settings
             payload = {"inputs": inputs}
 
+            # Add stability setting for more expressive voice (lower = more emotional range)
+            stability = self.config.get("audio", {}).get("stability")
+            if stability is not None:
+                # Ensure stability is a valid float between 0 and 1
+                stability_val = max(0.0, min(1.0, float(stability)))
+                payload["settings"] = {"stability": stability_val}
+
             response = requests.post(self.API_URL, headers=headers, json=payload)
-            response.raise_for_status()
+
+            # Better error handling with response body
+            if not response.ok:
+                try:
+                    error_json = response.json()
+                    error_detail = error_json.get("detail", {})
+                    if isinstance(error_detail, dict):
+                        error_msg = error_detail.get("message", str(error_detail))
+                    else:
+                        error_msg = str(error_detail)
+                except Exception:
+                    error_msg = response.text
+                raise ValueError(f"ElevenLabs API error {response.status_code}: {error_msg}")
+
 
             data = response.json()
 

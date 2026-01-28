@@ -22,10 +22,10 @@ topics:
     model: "gemini-3-pro-preview"
     use_search: true
     prompt_template: "daily_china_finance"
-    word_count: 1000  # Longer for detailed news
+    word_count: 700  # Longer for detailed news
     speakers:
-      - name: "主播"
-        voice_id: "aMSt68OGf4xUZAnLpTU8"
+      - name: "财经主播"
+        voice_id: "6u6JbqKdaQy89ENzLSju"
         role: "主持人"
 
 # Dialogue settings
@@ -87,6 +87,11 @@ video:
 # Audio processing settings
 audio:
   speed_ratio: 1.1              # Speed up factor (e.g. 1.25x faster)
+  # ElevenLabs text-to-dialogue settings
+  # Note: text-to-dialogue API only supports stability (not style/similarity_boost)
+  stability: 0             # Lower = more emotional range (0.0-1.0, default 0.5)
+                                # Recommended: 0.3-0.4 for expressive podcast, 0.6-0.8 for formal narration
+                                # Uncomment above line to enable custom stability
 
 # Database settings
 database:

@@ -340,7 +340,8 @@ def main() -> None:
     if topics_config:
         max_key_len = max(len(k) for k in topics_config.keys())
         for key, value in topics_config.items():
-            topic_help.append(f"  {key:<{max_key_len}} - {value}")
+            name = value.get("name", key) if isinstance(value, dict) else value
+            topic_help.append(f"  {key:<{max_key_len}} - {name}")
     else:
         # Fallback
         topic_help.append("  (No topics found in config)")

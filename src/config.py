@@ -64,8 +64,27 @@ def get_speakers(config: dict[str, Any]) -> dict[str, str]:
     Returns:
         Dict mapping speaker names to ElevenLabs voice IDs.
     """
-    speakers = config.get("dialogue", {}).get("speakers", [])
-    return {s["name"]: s["voice_id"] for s in speakers}
+    speakers_map = {}
+    
+    def add(source):
+        if isinstance(source, dict):
+             for lang_s in source.values():
+                 if isinstance(lang_s, list):
+                     for s in lang_s:
+                         speakers_map[s["name"]] = s["voice_id"]
+        elif isinstance(source, list):
+             for s in source:
+                 speakers_map[s["name"]] = s["voice_id"]
+
+    # Global
+    add(config.get("dialogue", {}).get("speakers", []))
+    
+    # Topics
+    for topic_conf in config.get("topics", {}).values():
+        if isinstance(topic_conf, dict):
+            add(topic_conf.get("speakers"))
+            
+    return speakers_map
 
 
 def get_topic_name(config: dict[str, Any], topic_key: str) -> str:
@@ -85,7 +104,47 @@ def get_topic_name(config: dict[str, Any], topic_key: str) -> str:
     topics = config.get("topics", {})
     if topic_key not in topics:
         raise KeyError(f"Unknown topic: {topic_key}. Available: {list(topics.keys())}")
-    return topics[topic_key]
+    
+    val = topics[topic_key]
+    if isinstance(val, dict):
+        return val.get("name", topic_key)
+    return val
+
+
+def get_topic_config(config: dict[str, Any], topic_key: str) -> dict[str, Any]:
+    """
+    Get the full configuration for a specific topic.
+    
+    Args:
+        config: Global configuration dictionary.
+        topic_key: Topic key.
+        
+    Returns:
+        Dictionary containing topic-specific settings (prompt, model, tools, etc.)
+        merged with global defaults where applicable.
+    """
+    topics = config.get("topics", {})
+    topic_val = topics.get(topic_key, {})
+    
+    # Normalize to dict if it's just a string (old format)
+    if isinstance(topic_val, str):
+        topic_conf = {"name": topic_val}
+    else:
+        topic_conf = topic_val.copy()
+        
+    # Get global defaults for fallback
+    dialogue_defaults = config.get("dialogue", {})
+    
+    # 1. Prompt template key
+    # Default to topic_key if not specified, or 'default' if that doesn't exist?
+    # Actually dialogue generator creates the prompt from template.
+    # We just pass the config.
+    
+    # Ensure 'name' is set
+    if "name" not in topic_conf and isinstance(topic_val, str):
+         topic_conf["name"] = topic_val
+         
+    return topic_conf
 
 
 def get_prompts_path() -> Path:

@@ -34,19 +34,36 @@ class AudioGenerator:
         if not self.api_key:
             raise ValueError("ELEVENLABS_API_KEY not found in environment")
 
-        # Build speaker -> voice_id mapping
+        # Build speaker -> voice_id mapping and role -> voice_id mapping
         speakers_config = config.get("dialogue", {}).get("speakers", [])
         self.voice_map = {}
+        self.role_map = {} # Fallback if LLM uses role name
         
-        if isinstance(speakers_config, dict):
-            # Flatten all languages into one map
-            for lang_speakers in speakers_config.values():
-                for s in lang_speakers:
+        def add_speakers(speakers_source):
+            if isinstance(speakers_source, dict):
+                 # Flatten all languages
+                for lang_speakers in speakers_source.values():
+                    if isinstance(lang_speakers, list):
+                        for s in lang_speakers:
+                            self.voice_map[s["name"]] = s["voice_id"]
+                            if "role" in s:
+                                self.role_map[s["role"]] = s["voice_id"]
+            elif isinstance(speakers_source, list):
+                for s in speakers_source:
                     self.voice_map[s["name"]] = s["voice_id"]
-        else:
-            # Handle legacy list format
-            for s in speakers_config:
-                self.voice_map[s["name"]] = s["voice_id"]
+                    if "role" in s:
+                        self.role_map[s["role"]] = s["voice_id"]
+
+        # 1. Add global speakers
+        add_speakers(speakers_config)
+
+        # 2. Add topic-specific speakers
+        topics = config.get("topics", {})
+        for topic_conf in topics.values():
+            if isinstance(topic_conf, dict):
+                topic_speakers = topic_conf.get("speakers")
+                if topic_speakers:
+                    add_speakers(topic_speakers)
 
     def _apply_speed_effect(self, input_path: Path, output_path: Path, speed_ratio: float) -> None:
         """Apply speed up effect using FFmpeg atempo filter."""
@@ -97,7 +114,13 @@ class AudioGenerator:
 
                 voice_id = self.voice_map.get(speaker)
                 if not voice_id:
-                    raise ValueError(f"Unknown speaker: {speaker}")
+                    # Try fallback to role map
+                    voice_id = self.role_map.get(speaker)
+                
+                if not voice_id:
+                    # Provide helpful error message listing available speakers
+                    known_speakers = list(self.voice_map.keys()) + list(self.role_map.keys())
+                    raise ValueError(f"Unknown speaker: '{speaker}'. Known: {known_speakers}")
 
                 inputs.append({
                     "voice_id": voice_id,

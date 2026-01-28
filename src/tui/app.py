@@ -41,7 +41,7 @@ class NewGenerationModal(ModalScreen[dict]):
         Binding("down", "focus_next", "Down"),
     ]
 
-    def __init__(self, topics: dict[str, str]):
+    def __init__(self, topics: dict[str, Any]):
         super().__init__()
         self.topics = topics
         self.selected_language = "CN"
@@ -63,7 +63,8 @@ class NewGenerationModal(ModalScreen[dict]):
             
             yield Label("Preset Topics / 预设主题", classes="modal-section-title")
             with Vertical():
-                for key, name in self.topics.items():
+                for key, value in self.topics.items():
+                    name = value.get("name", key) if isinstance(value, dict) else value
                     yield Button(f"{name}", id=f"topic-{key}", classes="topic-button", variant="primary")
             yield Button("Cancel / 取消", id="cancel", classes="topic-button", variant="error")
 

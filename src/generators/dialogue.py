@@ -11,7 +11,7 @@ from google.genai import types
 from dotenv import load_dotenv
 
 from ..database import Database
-from ..config import load_prompts
+from ..config import load_prompts, get_topic_config
 
 
 class DialogueGenerator:
@@ -56,18 +56,25 @@ class DialogueGenerator:
         language: str = "CN",
     ) -> str:
         """Build the prompt for dialogue generation."""
-        speakers_config = self.config.get("dialogue", {}).get("speakers", [])
+        # Get topic specific config
+        topic_conf = get_topic_config(self.config, topic_key) if topic_key else {}
+
+        # 1. Resolve Speakers
+        # Priority: Topic Config -> Global Config
+        speakers_source = topic_conf.get("speakers")
+        if not speakers_source:
+            speakers_source = self.config.get("dialogue", {}).get("speakers", [])
         
         # Determine speakers based on language
-        if isinstance(speakers_config, dict):
+        if isinstance(speakers_source, dict):
             # Pick by language, fallback to CN, then fallback to first available
-            speakers = speakers_config.get(language, speakers_config.get("CN"))
-            if not speakers and speakers_config:
+            speakers = speakers_source.get(language, speakers_source.get("CN"))
+            if not speakers and speakers_source:
                  # Fallback to first available value if specific and default missing
-                 speakers = next(iter(speakers_config.values()))
+                 speakers = next(iter(speakers_source.values()))
         else:
-            # Backward compatibility for list
-            speakers = speakers_config
+            # List format or backward compatibility
+            speakers = speakers_source
 
         if not speakers:
              speakers = []
@@ -76,49 +83,50 @@ class DialogueGenerator:
             f"{s['name']}（{s['role']}）" for s in speakers
         )
 
-        word_count = self.config.get("dialogue", {}).get("target_word_count", 180)
+        # 2. Resolve Word Count
+        word_count = topic_conf.get("word_count")
+        if not word_count:
+            word_count = self.config.get("dialogue", {}).get("target_word_count", 180)
+        
         history_text = "\n".join(f"- {h}" for h in history) if history else "（无）"
         
-        # Get language and culture instruction
+        # 3. Resolve Language Instructions
         languages_config = self.prompts.get("languages", {})
         lang_config = languages_config.get(language, {})
         
-        # Fallback to defaults if language not found
         lang_instr = lang_config.get("instruction", "请全程使用中文进行对话。")
         culture_instr = lang_config.get("culture", "Target Audience: Chinese.")
 
-        # Special handling for daily_china_finance
-        if topic_key == "daily_china_finance":
-            template = self.prompts.get("daily_china_finance", "")
-            return template.format(
-                word_count=word_count,
-                speakers_desc=speakers_desc,
-                history=history_text,
-                language_instruction=lang_instr,
-                culture_instruction=culture_instr,
-            )
+        # 4. Resolve Prompt Template
+        template_key = topic_conf.get("prompt_template")
+        
+        # Fallback/Legacy logic if not specified in config
+        if not template_key:
+            if topic_key == "daily_china_finance":
+                template_key = "daily_china_finance"
+            elif stock_code or topic_key == "stock_talk":
+                template_key = "stock_talk"
+            else:
+                template_key = "default"
 
-        # Use stock-specific prompt if stock_code is provided
-        if stock_code:
-            template = self.prompts.get("stock_talk", "")
-            return template.format(
-                stock_code=stock_code,
-                word_count=word_count,
-                speakers_desc=speakers_desc,
-                history=history_text,
-                language_instruction=lang_instr,
-                culture_instruction=culture_instr,
-            )
+        template = self.prompts.get(template_key, "")
+        if not template:
+            # Fallback if key exists but template missing, or some other error
+             template = self.prompts.get("default", "")
 
-        template = self.prompts.get("default", "")
-        return template.format(
-            topic=topic_name,
-            word_count=word_count,
-            speakers_desc=speakers_desc,
-            history=history_text,
-            language_instruction=lang_instr,
-            culture_instruction=culture_instr,
-        )
+        # 5. Format Prompt
+        # Handle variations in available keys for formatting
+        format_args = {
+            "topic": topic_name,
+            "word_count": word_count,
+            "speakers_desc": speakers_desc,
+            "history": history_text,
+            "language_instruction": lang_instr,
+            "culture_instruction": culture_instr,
+            "stock_code": stock_code or ""
+        }
+
+        return template.format(**format_args)
 
     def _extract_json(self, text: str) -> dict:
         """Extract JSON from AI response, handling markdown code blocks."""
@@ -172,11 +180,24 @@ class DialogueGenerator:
 
         try:
             # Configure generation
-            tools = []
-            model_name = self.model
-            if stock_code or topic_key in ["stock_talk", "daily_china_finance"]:
-                tools = [self.grounding_tool]
-                model_name = "gemini-3-pro-preview"
+            topic_conf = get_topic_config(self.config, topic_key)
+            
+            # Resolve Model
+            model_name = topic_conf.get("model", self.model)
+            
+            # Resolve Tools (Search)
+            use_search = topic_conf.get("use_search", False)
+            
+            # Legacy fallback checks
+            is_legacy_special = stock_code or topic_key in ["stock_talk", "daily_china_finance"]
+            
+            if "model" not in topic_conf and is_legacy_special:
+                 model_name = "gemini-3-pro-preview"
+            
+            if "use_search" not in topic_conf and is_legacy_special:
+                 use_search = True
+
+            tools = [self.grounding_tool] if use_search else []
 
             gen_config = types.GenerateContentConfig(
                 temperature=0.8,

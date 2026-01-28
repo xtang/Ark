@@ -2,13 +2,31 @@
 
 # Topic categories (select one at runtime)
 topics:
-  life_tips: "生活常识"          # Daily life knowledge
-  health: "健康保养"             # Health & wellness
-  history: "历史野史"            # Historical stories
-  curiosity: "中国离奇的鬼怪神秘故事"          # Curiosity & mysteries
-  stock_talk: "股票公司杂谈"      # Stock company talk (requires stock code)
-  myth: "中国怪诞奇谭"
-  daily_china_finance: "每日中国财经重要新闻"
+  life_tips: 
+    name: "生活常识"
+  health: 
+    name: "健康保养"
+  history: 
+    name: "历史野史"
+  curiosity: 
+    name: "中国离奇的鬼怪神秘故事"
+  myth: 
+    name: "中国怪诞奇谭"
+  stock_talk: 
+    name: "股票公司杂谈"
+    model: "gemini-3-pro-preview"
+    use_search: true
+    prompt_template: "stock_talk"
+  daily_china_finance: 
+    name: "每日中国财经重要新闻"
+    model: "gemini-3-pro-preview"
+    use_search: true
+    prompt_template: "daily_china_finance"
+    word_count: 1000  # Longer for detailed news
+    speakers:
+      - name: "主播"
+        voice_id: "aMSt68OGf4xUZAnLpTU8"
+        role: "主持人"
 
 # Dialogue settings
 dialogue:
@@ -68,7 +86,7 @@ video:
 
 # Audio processing settings
 audio:
-  speed_ratio: 1.05              # Speed up factor (e.g. 1.25x faster)
+  speed_ratio: 1.1              # Speed up factor (e.g. 1.25x faster)
 
 # Database settings
 database:

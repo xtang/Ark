@@ -98,7 +98,7 @@ stock_talk: |
 # Daily China Finance prompt template
 daily_china_finance: |
   {culture_instruction}
-  请生成一段关于「今日中国财经新闻与股市复盘」的双人对话脚本。
+  请生成一段关于「今日中国财经新闻与股市复盘」的单人叙述脚本。
   
   {language_instruction}
 
@@ -111,7 +111,7 @@ daily_china_finance: |
 
   ## 要求
   1. **内容真实可查**：所有信息必须是真实的，**必须基于实时的搜索结果**。请在对话中提及具体的新闻来源或数据。
-  2. **对话时长**：总字数约{word_count}字，适合90秒的正常语速朗读。
+  2. **对话时长**：总字数约{word_count}字，正常语速朗读。
   3. **对话者**：{speakers_desc}
   4. **风格**：专业、及时、犀利，像财经新闻评论节目。
   5. **极简结构**：开门见山，直接讨论今日最热话题。

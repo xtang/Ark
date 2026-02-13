@@ -4,6 +4,19 @@ Reclaim Our Parents' Attention
 
 ## Quick Start
 
+### Prerequisites
+
+- [ffmpeg](https://ffmpeg.org/) must be installed with [libass](https://github.com/libass/libass) support and available on your `PATH`.
+
+```bash
+# macOS
+brew tap homebrew-ffmpeg/ffmpeg
+brew install homebrew-ffmpeg/ffmpeg/ffmpeg --with-libass
+
+# Ubuntu / Debian
+sudo apt install ffmpeg libass-dev
+```
+
 ### 1. Installation
 
 This project uses `uv` for package management.
